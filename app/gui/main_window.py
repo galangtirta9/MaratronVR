@@ -31,6 +31,9 @@ STEAMVR_BUTTONS = {
     "Disabled": "disabled",
 }
 
+DPI_PRESETS = [800, 1000, 1200, 1600, 2000, 2400, 3200, 4000, 4800, 6400, 8000]
+CUSTOM_DPI_VALUE = "custom"
+
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -91,10 +94,12 @@ class MainWindow(QtWidgets.QWidget):
         for label, value in STEAMVR_BUTTONS.items():
             self.steamvr_sprint_button_combo.addItem(label, value)
 
-        self.stride_spin = QtWidgets.QDoubleSpinBox()
-        self.stride_spin.setRange(0.20, 1.50)
-        self.stride_spin.setSingleStep(0.01)
-        self.stride_spin.setSuffix(" m")
+        self.height_spin = QtWidgets.QDoubleSpinBox()
+        self.height_spin.setRange(80.0, 230.0)
+        self.height_spin.setSingleStep(0.5)
+        self.height_spin.setSuffix(" cm")
+
+        self.stride_estimate_label = QtWidgets.QLabel("Estimated stride: 0.72 m")
 
         self.weight_spin = QtWidgets.QDoubleSpinBox()
         self.weight_spin.setRange(20.0, 200.0)
@@ -107,10 +112,15 @@ class MainWindow(QtWidgets.QWidget):
         self.gender_combo = QtWidgets.QComboBox()
         self.gender_combo.addItems(["unspecified", "female", "male"])
 
-        self.mouse_dpi_spin = QtWidgets.QDoubleSpinBox()
-        self.mouse_dpi_spin.setRange(1.0, 30000.0)
-        self.mouse_dpi_spin.setSingleStep(100.0)
-        self.mouse_dpi_spin.setSuffix(" DPI")
+        self.mouse_dpi_combo = QtWidgets.QComboBox()
+        for dpi in DPI_PRESETS:
+            self.mouse_dpi_combo.addItem(f"{dpi} DPI", dpi)
+        self.mouse_dpi_combo.addItem("Custom", CUSTOM_DPI_VALUE)
+
+        self.custom_dpi_spin = QtWidgets.QDoubleSpinBox()
+        self.custom_dpi_spin.setRange(1.0, 30000.0)
+        self.custom_dpi_spin.setSingleStep(100.0)
+        self.custom_dpi_spin.setSuffix(" DPI")
 
         self.polling_rate_spin = QtWidgets.QDoubleSpinBox()
         self.polling_rate_spin.setRange(1.0, 8000.0)
@@ -189,11 +199,13 @@ class MainWindow(QtWidgets.QWidget):
         form.addRow("Sprint threshold", self.sprint_threshold_spin)
         form.addRow("UInput sprint button", self.sprint_button_combo)
         form.addRow("SteamVR sprint button", self.steamvr_sprint_button_combo)
-        form.addRow("Stride length", self.stride_spin)
+        form.addRow("Height", self.height_spin)
+        form.addRow("", self.stride_estimate_label)
         form.addRow("Weight", self.weight_spin)
         form.addRow("Age", self.age_spin)
         form.addRow("Gender", self.gender_combo)
-        form.addRow("Mouse DPI", self.mouse_dpi_spin)
+        form.addRow("Mouse DPI preset", self.mouse_dpi_combo)
+        form.addRow("Custom DPI", self.custom_dpi_spin)
         form.addRow("Sensor polling rate", self.polling_rate_spin)
         form.addRow("Incline", self.incline_spin)
         form.addRow("Manual friction multiplier", self.friction_spin)
@@ -259,11 +271,12 @@ class MainWindow(QtWidgets.QWidget):
             self.sprint_threshold_spin,
             self.sprint_button_combo,
             self.steamvr_sprint_button_combo,
-            self.stride_spin,
+            self.height_spin,
             self.weight_spin,
             self.age_spin,
             self.gender_combo,
-            self.mouse_dpi_spin,
+            self.mouse_dpi_combo,
+            self.custom_dpi_spin,
             self.polling_rate_spin,
             self.incline_spin,
             self.friction_spin,
@@ -281,6 +294,8 @@ class MainWindow(QtWidgets.QWidget):
                 widget.stateChanged.connect(self.on_config_changed)
 
         self.omnidirectional_check.stateChanged.connect(self.update_axis_controls)
+        self.height_spin.valueChanged.connect(self.update_stride_estimate)
+        self.mouse_dpi_combo.currentIndexChanged.connect(self.update_dpi_controls)
 
     def current_profile_name(self):
         return self.profile_combo.currentText() or self.data["active_profile"]
@@ -325,17 +340,20 @@ class MainWindow(QtWidgets.QWidget):
         self.sprint_threshold_spin.setValue(float(profile.get("sprint_threshold", 0.92)))
         self.sprint_button_combo.setCurrentText(profile.get("sprint_button", "BTN_THUMBL / L3"))
         self._set_combo_data(self.steamvr_sprint_button_combo, profile.get("steamvr_sprint_button", "grip"))
-        self.stride_spin.setValue(float(health.get("stride_length_m", 0.72)))
+        height_cm = float(health.get("height_cm", self._height_from_stride(float(health.get("stride_length_m", 0.72)))))
+        self.height_spin.setValue(height_cm)
         self.weight_spin.setValue(float(health.get("user_weight_kg", 55.0)))
         self.age_spin.setValue(int(health.get("age_years", 30)))
         self.gender_combo.setCurrentText(health.get("gender", "unspecified"))
-        self.mouse_dpi_spin.setValue(float(health.get("mouse_dpi", 1600.0)))
+        self._set_dpi_value(float(health.get("mouse_dpi", 1600.0)))
         self.polling_rate_spin.setValue(float(health.get("polling_rate_hz", 1000.0)))
         self.incline_spin.setValue(float(health.get("incline_percentage", 0.0)))
         self.friction_spin.setValue(float(health.get("manual_friction_multiplier", 1.0)))
         self.calorie_factor_spin.setValue(float(health.get("calorie_factor", 0.75)))
         self.curve_editor.set_points(profile.get("curve_points", DEFAULT_PROFILE["curve_points"]))
         self.update_axis_controls()
+        self.update_stride_estimate()
+        self.update_dpi_controls()
 
     def read_ui_to_profile(self):
         if self.device_combo.currentIndex() >= 0:
@@ -356,12 +374,14 @@ class MainWindow(QtWidgets.QWidget):
         profile["sprint_button"] = self.sprint_button_combo.currentText()
         profile["steamvr_sprint_button"] = self.steamvr_sprint_button_combo.currentData()
         profile["curve_points"] = self.curve_editor.get_points()
+        height_cm = self.height_spin.value()
         profile["health"] = {
-            "stride_length_m": self.stride_spin.value(),
+            "height_cm": height_cm,
+            "stride_length_m": self._stride_from_height(height_cm),
             "user_weight_kg": self.weight_spin.value(),
             "age_years": self.age_spin.value(),
             "gender": self.gender_combo.currentText(),
-            "mouse_dpi": self.mouse_dpi_spin.value(),
+            "mouse_dpi": self._current_dpi_value(),
             "polling_rate_hz": self.polling_rate_spin.value(),
             "incline_percentage": self.incline_spin.value(),
             "manual_friction_multiplier": self.friction_spin.value(),
@@ -384,6 +404,37 @@ class MainWindow(QtWidgets.QWidget):
 
     def update_axis_controls(self):
         self.axis_combo.setEnabled(not self.omnidirectional_check.isChecked())
+
+    def update_stride_estimate(self):
+        self.stride_estimate_label.setText(f"Estimated stride: {self._stride_from_height(self.height_spin.value()):.2f} m")
+
+    def update_dpi_controls(self):
+        self.custom_dpi_spin.setEnabled(self.mouse_dpi_combo.currentData() == CUSTOM_DPI_VALUE)
+
+    def _current_dpi_value(self):
+        value = self.mouse_dpi_combo.currentData()
+        if value == CUSTOM_DPI_VALUE:
+            return self.custom_dpi_spin.value()
+        return float(value or 1600.0)
+
+    def _set_dpi_value(self, dpi):
+        int_dpi = int(round(dpi))
+        index = self.mouse_dpi_combo.findData(int_dpi)
+        if index >= 0:
+            self.mouse_dpi_combo.setCurrentIndex(index)
+        else:
+            custom_index = self.mouse_dpi_combo.findData(CUSTOM_DPI_VALUE)
+            if custom_index >= 0:
+                self.mouse_dpi_combo.setCurrentIndex(custom_index)
+        self.custom_dpi_spin.setValue(float(dpi))
+
+    @staticmethod
+    def _stride_from_height(height_cm):
+        return max(0.1, float(height_cm) * 0.415 / 100.0)
+
+    @staticmethod
+    def _height_from_stride(stride_length_m):
+        return max(80.0, min(230.0, float(stride_length_m) * 100.0 / 0.415))
 
     def on_profile_selected(self, name):
         if not name:

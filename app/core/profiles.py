@@ -30,6 +30,7 @@ DEFAULT_PROFILE = {
         [1.0, 1.0],
     ],
     "health": {
+        "height_cm": 173.0,
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
         "calorie_factor": 1.0,
