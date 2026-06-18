@@ -49,6 +49,14 @@ DEFAULT_DATA = {
     "selected_device_path": "",
     "output_mode": OUTPUT_UINPUT,
     "steamvr": {"host": "127.0.0.1", "port": 9001},
+    "strava": {
+        "client_id": "",
+        "client_secret": "",
+        "access_token": "",
+        "refresh_token": "",
+        "expires_at": 0,
+        "activity_type": "Walk",
+    },
 }
 
 
@@ -84,6 +92,13 @@ def normalize_data(data):
     data.setdefault("steamvr", {})
     data["steamvr"].setdefault("host", "127.0.0.1")
     data["steamvr"].setdefault("port", 9001)
+    data.setdefault("strava", {})
+    data["strava"].setdefault("client_id", "")
+    data["strava"].setdefault("client_secret", "")
+    data["strava"].setdefault("access_token", "")
+    data["strava"].setdefault("refresh_token", "")
+    data["strava"].setdefault("expires_at", 0)
+    data["strava"].setdefault("activity_type", "Walk")
 
     for name, profile in list(data["profiles"].items()):
         merged = copy.deepcopy(DEFAULT_PROFILE)

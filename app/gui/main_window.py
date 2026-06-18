@@ -1,4 +1,6 @@
 import copy
+import datetime as dt
+import webbrowser
 
 from PyQt6 import QtWidgets
 
@@ -14,6 +16,7 @@ from app.core.profiles import (
     make_profile_config,
     save_data,
 )
+from app.core.strava_client import build_authorization_url, exchange_code, upload_activity
 from app.core.treadmill_reader import TreadmillWorker
 from app.gui.curve_widget import CurveEditor
 
@@ -43,6 +46,9 @@ class MainWindow(QtWidgets.QWidget):
         self.worker = None
         self.calibrator = None
         self.devices = []
+        self.session_start_time = None
+        self.last_telemetry = None
+        self.last_session = None
 
         self.setWindowTitle("Maratron Treadmill")
         self.resize(580, 820)
@@ -157,6 +163,16 @@ class MainWindow(QtWidgets.QWidget):
         self.install_driver_button = QtWidgets.QPushButton("Install SteamVR driver")
         self.uninstall_driver_button = QtWidgets.QPushButton("Uninstall SteamVR driver")
 
+        self.strava_client_id_edit = QtWidgets.QLineEdit()
+        self.strava_client_secret_edit = QtWidgets.QLineEdit()
+        self.strava_client_secret_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.strava_code_edit = QtWidgets.QLineEdit()
+        self.strava_activity_combo = QtWidgets.QComboBox()
+        self.strava_activity_combo.addItems(["Walk", "Run", "VirtualRun", "Workout"])
+        self.strava_authorize_button = QtWidgets.QPushButton("Authorize Strava")
+        self.strava_exchange_button = QtWidgets.QPushButton("Save Strava code")
+        self.strava_upload_button = QtWidgets.QPushButton("Upload last session")
+
         self.build_layout()
         self.connect_signals()
 
@@ -211,6 +227,17 @@ class MainWindow(QtWidgets.QWidget):
         steamvr_driver_buttons.addWidget(self.install_driver_button)
         steamvr_driver_buttons.addWidget(self.uninstall_driver_button)
 
+        strava_buttons = QtWidgets.QHBoxLayout()
+        strava_buttons.addWidget(self.strava_authorize_button)
+        strava_buttons.addWidget(self.strava_exchange_button)
+        strava_buttons.addWidget(self.strava_upload_button)
+
+        strava_form = QtWidgets.QFormLayout()
+        strava_form.addRow("Strava client ID", self.strava_client_id_edit)
+        strava_form.addRow("Strava client secret", self.strava_client_secret_edit)
+        strava_form.addRow("Strava auth code", self.strava_code_edit)
+        strava_form.addRow("Strava activity type", self.strava_activity_combo)
+
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(form)
         layout.addWidget(QtWidgets.QLabel("Response curve: left-click/add/drag, right-click/delete point"))
@@ -229,6 +256,8 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.reset_health_button)
         layout.addWidget(self.status_label)
         layout.addLayout(steamvr_driver_buttons)
+        layout.addLayout(strava_form)
+        layout.addLayout(strava_buttons)
         layout.addLayout(buttons)
         self.setLayout(layout)
 
@@ -245,6 +274,9 @@ class MainWindow(QtWidgets.QWidget):
         self.reset_health_button.clicked.connect(self.reset_health)
         self.install_driver_button.clicked.connect(self.install_steamvr_driver)
         self.uninstall_driver_button.clicked.connect(self.uninstall_steamvr_driver)
+        self.strava_authorize_button.clicked.connect(self.authorize_strava)
+        self.strava_exchange_button.clicked.connect(self.exchange_strava_code)
+        self.strava_upload_button.clicked.connect(self.upload_last_session_to_strava)
         self.curve_editor.pointsChanged.connect(self.on_curve_changed)
         self.device_combo.currentIndexChanged.connect(self.on_config_changed)
 
@@ -269,6 +301,9 @@ class MainWindow(QtWidgets.QWidget):
             self.custom_dpi_spin,
             self.polling_rate_spin,
             self.incline_spin,
+            self.strava_client_id_edit,
+            self.strava_client_secret_edit,
+            self.strava_activity_combo,
         ]
 
         for widget in widgets:
@@ -337,6 +372,10 @@ class MainWindow(QtWidgets.QWidget):
         self.polling_rate_spin.setValue(float(health.get("polling_rate_hz", 1000.0)))
         self.incline_spin.setValue(float(health.get("incline_degrees", health.get("incline_percentage", 0.0))))
         self.curve_editor.set_points(profile.get("curve_points", DEFAULT_PROFILE["curve_points"]))
+        strava = self.data.get("strava", {})
+        self.strava_client_id_edit.setText(strava.get("client_id", ""))
+        self.strava_client_secret_edit.setText(strava.get("client_secret", ""))
+        self.strava_activity_combo.setCurrentText(strava.get("activity_type", "Walk"))
         self.update_axis_controls()
         self.update_stride_estimate()
         self.update_dpi_controls()
@@ -346,6 +385,10 @@ class MainWindow(QtWidgets.QWidget):
             self.data["selected_device_path"] = self.device_combo.currentData()
 
         self.data["output_mode"] = self.output_mode_combo.currentData() or OUTPUT_UINPUT
+        self.data.setdefault("strava", {})
+        self.data["strava"]["client_id"] = self.strava_client_id_edit.text().strip()
+        self.data["strava"]["client_secret"] = self.strava_client_secret_edit.text().strip()
+        self.data["strava"]["activity_type"] = self.strava_activity_combo.currentText()
         name = self.current_profile_name()
         profile = self.data["profiles"][name]
         profile["axis"] = self.axis_combo.currentText()
@@ -487,6 +530,9 @@ class MainWindow(QtWidgets.QWidget):
             return
 
         self.save()
+        self.session_start_time = dt.datetime.now().replace(microsecond=0)
+        self.last_telemetry = None
+        self.last_session = None
         self.worker = TreadmillWorker(make_profile_config(self.data))
         self.worker.telemetry.connect(self.update_telemetry)
         self.worker.status.connect(self.status_label.setText)
@@ -498,6 +544,7 @@ class MainWindow(QtWidgets.QWidget):
             self.worker.stop()
             self.worker.wait(1500)
             self.worker = None
+            self._finalize_session()
 
     def auto_calibrate(self):
         self.stop()
@@ -546,10 +593,71 @@ class MainWindow(QtWidgets.QWidget):
 
         self.status_label.setText("SteamVR driver uninstalled. Restart SteamVR if it is already running.")
 
+    def authorize_strava(self):
+        self.read_ui_to_profile()
+        try:
+            url = build_authorization_url(self.data.get("strava", {}).get("client_id", ""))
+        except Exception as exc:
+            self.show_error(str(exc))
+            return
+
+        webbrowser.open(url)
+        self.status_label.setText("Opened Strava authorization page. Paste the returned code here.")
+
+    def exchange_strava_code(self):
+        self.read_ui_to_profile()
+        strava = self.data.setdefault("strava", {})
+        try:
+            token = exchange_code(
+                strava.get("client_id", ""),
+                strava.get("client_secret", ""),
+                self.strava_code_edit.text(),
+            )
+        except Exception as exc:
+            self.show_error(f"Failed to authorize Strava:\n{exc}")
+            return
+
+        strava.update(
+            {
+                "access_token": token.get("access_token", ""),
+                "refresh_token": token.get("refresh_token", strava.get("refresh_token", "")),
+                "expires_at": token.get("expires_at", 0),
+            }
+        )
+        self.strava_code_edit.clear()
+        save_data(self.data)
+        self.status_label.setText("Strava authorization saved.")
+
+    def upload_last_session_to_strava(self):
+        if not self.last_session:
+            self.show_error("No completed treadmill session to upload yet.")
+            return
+
+        self.read_ui_to_profile()
+        strava = self.data.setdefault("strava", {})
+        try:
+            result, token = upload_activity(strava, self.last_session)
+        except Exception as exc:
+            self.show_error(f"Failed to upload to Strava:\n{exc}")
+            return
+
+        if token:
+            strava.update(
+                {
+                    "access_token": token.get("access_token", strava.get("access_token", "")),
+                    "refresh_token": token.get("refresh_token", strava.get("refresh_token", "")),
+                    "expires_at": token.get("expires_at", strava.get("expires_at", 0)),
+                }
+            )
+            save_data(self.data)
+
+        self.status_label.setText(f"Uploaded to Strava: activity #{result.get('id', 'created')}")
+
     def show_error(self, message):
         QtWidgets.QMessageBox.critical(self, "Maratron error", message)
 
     def update_telemetry(self, data):
+        self.last_telemetry = dict(data)
         self.raw_label.setText(f"Raw: {data['raw']}")
         self.filtered_label.setText(f"Filtered: {data['filtered']:.2f}")
         self.output_label.setText(f"Joystick: {data['joy']}")
@@ -561,6 +669,26 @@ class MainWindow(QtWidgets.QWidget):
         self.distance_label.setText(f"Distance: {data['distance_m']:.1f} m")
         self.calories_label.setText(f"Calories: {data['calories']:.1f} kcal")
         self.met_label.setText(f"MET: {data.get('met', 0.0):.2f}")
+
+    def _finalize_session(self):
+        if self.session_start_time is None or self.last_telemetry is None:
+            self.session_start_time = None
+            return
+
+        ended = dt.datetime.now().replace(microsecond=0)
+        elapsed = max(1, int((ended - self.session_start_time).total_seconds()))
+        self.last_session = {
+            "name": "Maratron Treadmill Session",
+            "start_date_local": self.session_start_time.isoformat(),
+            "elapsed_time": elapsed,
+            "distance_m": float(self.last_telemetry.get("distance_m", 0.0)),
+            "calories": float(self.last_telemetry.get("calories", 0.0)),
+            "description": "Manual treadmill session recorded by MaratronVR.",
+        }
+        self.session_start_time = None
+        self.status_label.setText(
+            f"Session ready for Strava: {self.last_session['distance_m']:.1f} m, {elapsed}s"
+        )
 
     def closeEvent(self, event):
         self.stop()
