@@ -122,7 +122,7 @@ class TreadmillWorker(QtCore.QThread):
             "sprint": sprint_active,
             "speed": curved,
         }
-        health = self.health.update(normalized, self.config)
+        health = self.health.update(normalized, self.config, raw_x=raw_x, raw_y=raw_y)
 
         telemetry = {
             "raw": raw_y,

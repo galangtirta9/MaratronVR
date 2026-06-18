@@ -101,6 +101,31 @@ class MainWindow(QtWidgets.QWidget):
         self.weight_spin.setSingleStep(0.5)
         self.weight_spin.setSuffix(" kg")
 
+        self.age_spin = QtWidgets.QSpinBox()
+        self.age_spin.setRange(1, 120)
+
+        self.gender_combo = QtWidgets.QComboBox()
+        self.gender_combo.addItems(["unspecified", "female", "male"])
+
+        self.mouse_dpi_spin = QtWidgets.QDoubleSpinBox()
+        self.mouse_dpi_spin.setRange(1.0, 30000.0)
+        self.mouse_dpi_spin.setSingleStep(100.0)
+        self.mouse_dpi_spin.setSuffix(" DPI")
+
+        self.polling_rate_spin = QtWidgets.QDoubleSpinBox()
+        self.polling_rate_spin.setRange(1.0, 8000.0)
+        self.polling_rate_spin.setSingleStep(125.0)
+        self.polling_rate_spin.setSuffix(" Hz")
+
+        self.incline_spin = QtWidgets.QDoubleSpinBox()
+        self.incline_spin.setRange(0.0, 40.0)
+        self.incline_spin.setSingleStep(0.5)
+        self.incline_spin.setSuffix(" %")
+
+        self.friction_spin = QtWidgets.QDoubleSpinBox()
+        self.friction_spin.setRange(0.1, 5.0)
+        self.friction_spin.setSingleStep(0.05)
+
         self.calorie_factor_spin = QtWidgets.QDoubleSpinBox()
         self.calorie_factor_spin.setRange(0.1, 2.0)
         self.calorie_factor_spin.setSingleStep(0.05)
@@ -113,8 +138,10 @@ class MainWindow(QtWidgets.QWidget):
         self.movement_label = QtWidgets.QLabel("Movement: x=0.00 y=0.00")
         self.sprint_label = QtWidgets.QLabel("Sprint: OFF")
         self.steps_label = QtWidgets.QLabel("Steps: 0")
+        self.speed_label = QtWidgets.QLabel("Speed: 0.00 km/h")
         self.distance_label = QtWidgets.QLabel("Distance: 0 m")
         self.calories_label = QtWidgets.QLabel("Calories: 0 kcal")
+        self.met_label = QtWidgets.QLabel("MET: 0.00")
         self.status_label = QtWidgets.QLabel("Stopped")
 
         self.speed_bar = QtWidgets.QProgressBar()
@@ -164,6 +191,12 @@ class MainWindow(QtWidgets.QWidget):
         form.addRow("SteamVR sprint button", self.steamvr_sprint_button_combo)
         form.addRow("Stride length", self.stride_spin)
         form.addRow("Weight", self.weight_spin)
+        form.addRow("Age", self.age_spin)
+        form.addRow("Gender", self.gender_combo)
+        form.addRow("Mouse DPI", self.mouse_dpi_spin)
+        form.addRow("Sensor polling rate", self.polling_rate_spin)
+        form.addRow("Incline", self.incline_spin)
+        form.addRow("Manual friction multiplier", self.friction_spin)
         form.addRow("Calorie factor", self.calorie_factor_spin)
 
         buttons = QtWidgets.QHBoxLayout()
@@ -187,8 +220,10 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.movement_label)
         layout.addWidget(self.sprint_label)
         layout.addWidget(self.steps_label)
+        layout.addWidget(self.speed_label)
         layout.addWidget(self.distance_label)
         layout.addWidget(self.calories_label)
+        layout.addWidget(self.met_label)
         layout.addWidget(self.reset_health_button)
         layout.addWidget(self.status_label)
         layout.addLayout(steamvr_driver_buttons)
@@ -226,6 +261,12 @@ class MainWindow(QtWidgets.QWidget):
             self.steamvr_sprint_button_combo,
             self.stride_spin,
             self.weight_spin,
+            self.age_spin,
+            self.gender_combo,
+            self.mouse_dpi_spin,
+            self.polling_rate_spin,
+            self.incline_spin,
+            self.friction_spin,
             self.calorie_factor_spin,
         ]
 
@@ -286,6 +327,12 @@ class MainWindow(QtWidgets.QWidget):
         self._set_combo_data(self.steamvr_sprint_button_combo, profile.get("steamvr_sprint_button", "grip"))
         self.stride_spin.setValue(float(health.get("stride_length_m", 0.72)))
         self.weight_spin.setValue(float(health.get("user_weight_kg", 55.0)))
+        self.age_spin.setValue(int(health.get("age_years", 30)))
+        self.gender_combo.setCurrentText(health.get("gender", "unspecified"))
+        self.mouse_dpi_spin.setValue(float(health.get("mouse_dpi", 1600.0)))
+        self.polling_rate_spin.setValue(float(health.get("polling_rate_hz", 1000.0)))
+        self.incline_spin.setValue(float(health.get("incline_percentage", 0.0)))
+        self.friction_spin.setValue(float(health.get("manual_friction_multiplier", 1.0)))
         self.calorie_factor_spin.setValue(float(health.get("calorie_factor", 0.75)))
         self.curve_editor.set_points(profile.get("curve_points", DEFAULT_PROFILE["curve_points"]))
         self.update_axis_controls()
@@ -312,6 +359,12 @@ class MainWindow(QtWidgets.QWidget):
         profile["health"] = {
             "stride_length_m": self.stride_spin.value(),
             "user_weight_kg": self.weight_spin.value(),
+            "age_years": self.age_spin.value(),
+            "gender": self.gender_combo.currentText(),
+            "mouse_dpi": self.mouse_dpi_spin.value(),
+            "polling_rate_hz": self.polling_rate_spin.value(),
+            "incline_percentage": self.incline_spin.value(),
+            "manual_friction_multiplier": self.friction_spin.value(),
             "calorie_factor": self.calorie_factor_spin.value(),
         }
         self.data["active_profile"] = name
@@ -432,8 +485,10 @@ class MainWindow(QtWidgets.QWidget):
             self.worker.reset_health()
 
         self.steps_label.setText("Steps: 0")
+        self.speed_label.setText("Speed: 0.00 km/h")
         self.distance_label.setText("Distance: 0 m")
         self.calories_label.setText("Calories: 0 kcal")
+        self.met_label.setText("MET: 0.00")
 
     def install_steamvr_driver(self):
         try:
@@ -464,8 +519,10 @@ class MainWindow(QtWidgets.QWidget):
         self.sprint_label.setText(f"Sprint: {'ON' if data['sprint'] else 'OFF'}")
         self.speed_bar.setValue(int(data["curved"] * 100))
         self.steps_label.setText(f"Steps: {data['steps']}")
+        self.speed_label.setText(f"Speed: {data.get('speed_kmh', 0.0):.2f} km/h")
         self.distance_label.setText(f"Distance: {data['distance_m']:.1f} m")
         self.calories_label.setText(f"Calories: {data['calories']:.1f} kcal")
+        self.met_label.setText(f"MET: {data.get('met', 0.0):.2f}")
 
     def closeEvent(self, event):
         self.stop()

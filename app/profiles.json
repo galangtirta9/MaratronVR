@@ -3,10 +3,11 @@
   "profiles": {
     "Alyx": {
       "axis": "REL_Y",
+      "omnidirectional": false,
       "invert": true,
-      "deadzone": 2,
+      "deadzone": 0,
       "smoothing": 0.01,
-      "max_raw_speed": 20.0,
+      "max_raw_speed": 1.0,
       "poll_interval_ms": 1,
       "auto_sprint": false,
       "sprint_threshold": 0.1,
@@ -37,11 +38,18 @@
       "health": {
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
-        "calorie_factor": 0.75
+        "calorie_factor": 0.75,
+        "mouse_dpi": 1600.0,
+        "polling_rate_hz": 1000.0,
+        "incline_percentage": 0.0,
+        "manual_friction_multiplier": 1.0,
+        "age_years": 30,
+        "gender": "unspecified"
       }
     },
     "Skyrim": {
       "axis": "REL_Y",
+      "omnidirectional": false,
       "invert": true,
       "deadzone": 0,
       "smoothing": 0.01,
@@ -76,7 +84,13 @@
       "health": {
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
-        "calorie_factor": 0.75
+        "calorie_factor": 0.75,
+        "mouse_dpi": 1600.0,
+        "polling_rate_hz": 1000.0,
+        "incline_percentage": 0.0,
+        "manual_friction_multiplier": 1.0,
+        "age_years": 30,
+        "gender": "unspecified"
       }
     }
   },

@@ -32,7 +32,13 @@ DEFAULT_PROFILE = {
     "health": {
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
-        "calorie_factor": 0.75,
+        "calorie_factor": 1.0,
+        "mouse_dpi": 1600.0,
+        "polling_rate_hz": 1000.0,
+        "incline_percentage": 0.0,
+        "manual_friction_multiplier": 1.0,
+        "age_years": 30,
+        "gender": "unspecified",
     },
 }
 
