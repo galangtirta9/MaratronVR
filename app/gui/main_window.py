@@ -167,8 +167,6 @@ class MainWindow(QtWidgets.QWidget):
         self.strava_client_secret_edit = QtWidgets.QLineEdit()
         self.strava_client_secret_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.strava_code_edit = QtWidgets.QLineEdit()
-        self.strava_activity_combo = QtWidgets.QComboBox()
-        self.strava_activity_combo.addItems(["Walk", "Run", "VirtualRun", "Workout"])
         self.strava_authorize_button = QtWidgets.QPushButton("Authorize Strava")
         self.strava_exchange_button = QtWidgets.QPushButton("Save Strava code")
         self.strava_upload_button = QtWidgets.QPushButton("Upload last session")
@@ -236,7 +234,6 @@ class MainWindow(QtWidgets.QWidget):
         strava_form.addRow("Strava client ID", self.strava_client_id_edit)
         strava_form.addRow("Strava client secret", self.strava_client_secret_edit)
         strava_form.addRow("Strava auth code", self.strava_code_edit)
-        strava_form.addRow("Strava activity type", self.strava_activity_combo)
 
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(form)
@@ -303,7 +300,6 @@ class MainWindow(QtWidgets.QWidget):
             self.incline_spin,
             self.strava_client_id_edit,
             self.strava_client_secret_edit,
-            self.strava_activity_combo,
         ]
 
         for widget in widgets:
@@ -375,7 +371,6 @@ class MainWindow(QtWidgets.QWidget):
         strava = self.data.get("strava", {})
         self.strava_client_id_edit.setText(strava.get("client_id", ""))
         self.strava_client_secret_edit.setText(strava.get("client_secret", ""))
-        self.strava_activity_combo.setCurrentText(strava.get("activity_type", "Walk"))
         self.update_axis_controls()
         self.update_stride_estimate()
         self.update_dpi_controls()
@@ -388,7 +383,6 @@ class MainWindow(QtWidgets.QWidget):
         self.data.setdefault("strava", {})
         self.data["strava"]["client_id"] = self.strava_client_id_edit.text().strip()
         self.data["strava"]["client_secret"] = self.strava_client_secret_edit.text().strip()
-        self.data["strava"]["activity_type"] = self.strava_activity_combo.currentText()
         name = self.current_profile_name()
         profile = self.data["profiles"][name]
         profile["axis"] = self.axis_combo.currentText()
@@ -677,17 +671,23 @@ class MainWindow(QtWidgets.QWidget):
 
         ended = dt.datetime.now().replace(microsecond=0)
         elapsed = max(1, int((ended - self.session_start_time).total_seconds()))
+        distance_m = float(self.last_telemetry.get("distance_m", 0.0))
+        average_speed_kmh = (distance_m / elapsed) * 3.6 if elapsed > 0 else 0.0
+        threshold_kmh = float(self.data.get("strava", {}).get("auto_detect_run_kmh", 8.0) or 8.0)
+        activity_type = "Run" if average_speed_kmh >= threshold_kmh else "Walk"
         self.last_session = {
             "name": "Maratron Treadmill Session",
+            "activity_type": activity_type,
             "start_date_local": self.session_start_time.isoformat(),
             "elapsed_time": elapsed,
-            "distance_m": float(self.last_telemetry.get("distance_m", 0.0)),
+            "distance_m": distance_m,
             "calories": float(self.last_telemetry.get("calories", 0.0)),
+            "average_speed_kmh": average_speed_kmh,
             "description": "Manual treadmill session recorded by MaratronVR.",
         }
         self.session_start_time = None
         self.status_label.setText(
-            f"Session ready for Strava: {self.last_session['distance_m']:.1f} m, {elapsed}s"
+            f"Session ready for Strava: {activity_type}, {distance_m:.1f} m, {average_speed_kmh:.2f} km/h"
         )
 
     def closeEvent(self, event):

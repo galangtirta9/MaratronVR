@@ -55,7 +55,7 @@ DEFAULT_DATA = {
         "access_token": "",
         "refresh_token": "",
         "expires_at": 0,
-        "activity_type": "Walk",
+        "auto_detect_run_kmh": 8.0,
     },
 }
 
@@ -98,7 +98,7 @@ def normalize_data(data):
     data["strava"].setdefault("access_token", "")
     data["strava"].setdefault("refresh_token", "")
     data["strava"].setdefault("expires_at", 0)
-    data["strava"].setdefault("activity_type", "Walk")
+    data["strava"].setdefault("auto_detect_run_kmh", 8.0)
 
     for name, profile in list(data["profiles"].items()):
         merged = copy.deepcopy(DEFAULT_PROFILE)

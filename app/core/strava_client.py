@@ -66,7 +66,7 @@ def upload_activity(strava_config, session):
 
     payload = {
         "name": session.get("name", "Maratron Treadmill Session"),
-        "type": strava_config.get("activity_type", "Walk") or "Walk",
+        "type": session.get("activity_type") or strava_config.get("activity_type", "Walk") or "Walk",
         "start_date_local": session["start_date_local"],
         "elapsed_time": int(max(1, session.get("elapsed_time", 0))),
         "distance": float(max(0.0, session.get("distance_m", 0.0))),
