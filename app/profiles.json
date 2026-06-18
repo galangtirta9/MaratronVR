@@ -1,0 +1,89 @@
+{
+  "active_profile": "Alyx",
+  "profiles": {
+    "Alyx": {
+      "axis": "REL_Y",
+      "invert": true,
+      "deadzone": 2,
+      "smoothing": 0.01,
+      "max_raw_speed": 20.0,
+      "poll_interval_ms": 1,
+      "auto_sprint": false,
+      "sprint_threshold": 0.1,
+      "sprint_button": "Disabled",
+      "steamvr_sprint_button": "grip",
+      "curve_points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.25,
+          0.12
+        ],
+        [
+          0.5,
+          0.25
+        ],
+        [
+          0.75,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "health": {
+        "stride_length_m": 0.72,
+        "user_weight_kg": 55.0,
+        "calorie_factor": 0.75
+      }
+    },
+    "Skyrim": {
+      "axis": "REL_Y",
+      "invert": true,
+      "deadzone": 0,
+      "smoothing": 0.01,
+      "max_raw_speed": 1.0,
+      "poll_interval_ms": 1,
+      "auto_sprint": true,
+      "sprint_threshold": 0.1,
+      "sprint_button": "Disabled",
+      "steamvr_sprint_button": "trackpad",
+      "curve_points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.25,
+          0.12
+        ],
+        [
+          0.5,
+          0.25
+        ],
+        [
+          0.75,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "health": {
+        "stride_length_m": 0.72,
+        "user_weight_kg": 55.0,
+        "calorie_factor": 0.75
+      }
+    }
+  },
+  "selected_device_path": "",
+  "output_mode": "uinput",
+  "steamvr": {
+    "host": "127.0.0.1",
+    "port": 9001
+  }
+}
