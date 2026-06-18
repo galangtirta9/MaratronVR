@@ -34,6 +34,7 @@ DEFAULT_PROFILE = {
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
         "calorie_factor": 1.0,
+        "distance_calibration": 1.0,
         "mouse_dpi": 1600.0,
         "polling_rate_hz": 1000.0,
         "incline_degrees": 0.0,

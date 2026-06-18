@@ -27,18 +27,31 @@ class HealthTracker:
         weight_kg = max(20.0, float(health.get("user_weight_kg", 55.0)))
         calorie_factor = max(0.1, float(health.get("calorie_factor", 1.0)))
         mouse_dpi = max(1.0, float(health.get("mouse_dpi", 1600.0)))
-        incline_degrees = max(0.0, float(health.get("incline_degrees", health.get("incline_percentage", 0.0))))
         manual_friction_multiplier = max(0.1, float(health.get("manual_friction_multiplier", 1.0)))
+        distance_calibration = max(0.01, float(health.get("distance_calibration", 1.0)))
+
+        # Handle incline: degrees vs legacy percentage
+        raw_incline = health.get("incline_degrees", health.get("incline_percentage", None))
+        if raw_incline is None:
+            incline_grade = 0.0
+        else:
+            raw_incline = float(raw_incline)
+            if "incline_degrees" in health:
+                # Convert degrees to grade fraction: grade = tan(radians(degrees))
+                incline_grade = math.tan(math.radians(max(0.0, raw_incline)))
+            else:
+                # Legacy fallback: treat value as percentage grade
+                incline_grade = max(0.0, raw_incline) / 100.0
 
         counts = math.hypot(float(raw_x), float(raw_y))
         meters_per_count = 0.0254 / mouse_dpi
-        segment_distance_m = counts * meters_per_count
+        segment_distance_m = counts * meters_per_count * distance_calibration
 
         self.distance_m += segment_distance_m
         self.speed_kmh = (segment_distance_m / dt) * 3.6 if dt > 0 else 0.0
 
         speed_mps = self.speed_kmh / 3.6
-        walking_met = self._walking_met(speed_mps, incline_degrees)
+        walking_met = self._walking_met(speed_mps, incline_grade)
         adjusted_met = walking_met * manual_friction_multiplier * calorie_factor
         self.calories += (adjusted_met * 3.5 * weight_kg / 200.0) * (dt / 60.0)
 
@@ -54,9 +67,9 @@ class HealthTracker:
         }
 
     @staticmethod
-    def _walking_met(speed_mps, incline_degrees):
+    def _walking_met(speed_mps, incline_grade):
         speed_m_min = max(0.0, speed_mps) * 60.0
-        grade = math.tan(math.radians(max(0.0, incline_degrees)))
+        grade = max(0.0, incline_grade)
 
         if speed_m_min <= 0.0:
             return 1.0
