@@ -36,7 +36,7 @@ DEFAULT_PROFILE = {
         "calorie_factor": 1.0,
         "mouse_dpi": 1600.0,
         "polling_rate_hz": 1000.0,
-        "incline_percentage": 0.0,
+        "incline_degrees": 0.0,
         "manual_friction_multiplier": 1.0,
         "age_years": 30,
         "gender": "unspecified",

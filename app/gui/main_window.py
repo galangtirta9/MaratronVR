@@ -128,17 +128,9 @@ class MainWindow(QtWidgets.QWidget):
         self.polling_rate_spin.setSuffix(" Hz")
 
         self.incline_spin = QtWidgets.QDoubleSpinBox()
-        self.incline_spin.setRange(0.0, 40.0)
+        self.incline_spin.setRange(0.0, 25.0)
         self.incline_spin.setSingleStep(0.5)
-        self.incline_spin.setSuffix(" %")
-
-        self.friction_spin = QtWidgets.QDoubleSpinBox()
-        self.friction_spin.setRange(0.1, 5.0)
-        self.friction_spin.setSingleStep(0.05)
-
-        self.calorie_factor_spin = QtWidgets.QDoubleSpinBox()
-        self.calorie_factor_spin.setRange(0.1, 2.0)
-        self.calorie_factor_spin.setSingleStep(0.05)
+        self.incline_spin.setSuffix("°")
 
         self.curve_editor = CurveEditor()
 
@@ -208,8 +200,6 @@ class MainWindow(QtWidgets.QWidget):
         form.addRow("Custom DPI", self.custom_dpi_spin)
         form.addRow("Sensor polling rate", self.polling_rate_spin)
         form.addRow("Incline", self.incline_spin)
-        form.addRow("Manual friction multiplier", self.friction_spin)
-        form.addRow("Calorie factor", self.calorie_factor_spin)
 
         buttons = QtWidgets.QHBoxLayout()
         buttons.addWidget(self.start_button)
@@ -279,8 +269,6 @@ class MainWindow(QtWidgets.QWidget):
             self.custom_dpi_spin,
             self.polling_rate_spin,
             self.incline_spin,
-            self.friction_spin,
-            self.calorie_factor_spin,
         ]
 
         for widget in widgets:
@@ -347,9 +335,7 @@ class MainWindow(QtWidgets.QWidget):
         self.gender_combo.setCurrentText(health.get("gender", "unspecified"))
         self._set_dpi_value(float(health.get("mouse_dpi", 1600.0)))
         self.polling_rate_spin.setValue(float(health.get("polling_rate_hz", 1000.0)))
-        self.incline_spin.setValue(float(health.get("incline_percentage", 0.0)))
-        self.friction_spin.setValue(float(health.get("manual_friction_multiplier", 1.0)))
-        self.calorie_factor_spin.setValue(float(health.get("calorie_factor", 0.75)))
+        self.incline_spin.setValue(float(health.get("incline_degrees", health.get("incline_percentage", 0.0))))
         self.curve_editor.set_points(profile.get("curve_points", DEFAULT_PROFILE["curve_points"]))
         self.update_axis_controls()
         self.update_stride_estimate()
@@ -375,6 +361,7 @@ class MainWindow(QtWidgets.QWidget):
         profile["steamvr_sprint_button"] = self.steamvr_sprint_button_combo.currentData()
         profile["curve_points"] = self.curve_editor.get_points()
         height_cm = self.height_spin.value()
+        existing_health = profile.get("health", {})
         profile["health"] = {
             "height_cm": height_cm,
             "stride_length_m": self._stride_from_height(height_cm),
@@ -383,9 +370,9 @@ class MainWindow(QtWidgets.QWidget):
             "gender": self.gender_combo.currentText(),
             "mouse_dpi": self._current_dpi_value(),
             "polling_rate_hz": self.polling_rate_spin.value(),
-            "incline_percentage": self.incline_spin.value(),
-            "manual_friction_multiplier": self.friction_spin.value(),
-            "calorie_factor": self.calorie_factor_spin.value(),
+            "incline_degrees": self.incline_spin.value(),
+            "manual_friction_multiplier": existing_health.get("manual_friction_multiplier", 1.0),
+            "calorie_factor": existing_health.get("calorie_factor", 1.0),
         }
         self.data["active_profile"] = name
         return profile

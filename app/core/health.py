@@ -27,7 +27,7 @@ class HealthTracker:
         weight_kg = max(20.0, float(health.get("user_weight_kg", 55.0)))
         calorie_factor = max(0.1, float(health.get("calorie_factor", 1.0)))
         mouse_dpi = max(1.0, float(health.get("mouse_dpi", 1600.0)))
-        incline_percentage = max(0.0, float(health.get("incline_percentage", 0.0)))
+        incline_degrees = max(0.0, float(health.get("incline_degrees", health.get("incline_percentage", 0.0))))
         manual_friction_multiplier = max(0.1, float(health.get("manual_friction_multiplier", 1.0)))
 
         counts = math.hypot(float(raw_x), float(raw_y))
@@ -38,7 +38,7 @@ class HealthTracker:
         self.speed_kmh = (segment_distance_m / dt) * 3.6 if dt > 0 else 0.0
 
         speed_mps = self.speed_kmh / 3.6
-        walking_met = self._walking_met(speed_mps, incline_percentage)
+        walking_met = self._walking_met(speed_mps, incline_degrees)
         adjusted_met = walking_met * manual_friction_multiplier * calorie_factor
         self.calories += (adjusted_met * 3.5 * weight_kg / 200.0) * (dt / 60.0)
 
@@ -54,9 +54,9 @@ class HealthTracker:
         }
 
     @staticmethod
-    def _walking_met(speed_mps, incline_percentage):
+    def _walking_met(speed_mps, incline_degrees):
         speed_m_min = max(0.0, speed_mps) * 60.0
-        grade = max(0.0, incline_percentage) / 100.0
+        grade = math.tan(math.radians(max(0.0, incline_degrees)))
 
         if speed_m_min <= 0.0:
             return 1.0

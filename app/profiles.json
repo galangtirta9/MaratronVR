@@ -36,15 +36,16 @@
         ]
       ],
       "health": {
-        "stride_length_m": 0.72,
+        "height_cm": 173.0,
+        "stride_length_m": 0.71795,
         "user_weight_kg": 55.0,
         "calorie_factor": 0.75,
-        "mouse_dpi": 1600.0,
+        "mouse_dpi": 800.0,
         "polling_rate_hz": 1000.0,
-        "incline_percentage": 0.0,
-        "manual_friction_multiplier": 1.0,
+        "manual_friction_multiplier": 0.65,
         "age_years": 30,
-        "gender": "unspecified"
+        "gender": "unspecified",
+        "incline_degrees": 0.0
       }
     },
     "Skyrim": {
@@ -82,15 +83,16 @@
         ]
       ],
       "health": {
+        "height_cm": 173.0,
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
         "calorie_factor": 0.75,
         "mouse_dpi": 1600.0,
         "polling_rate_hz": 1000.0,
-        "incline_percentage": 0.0,
         "manual_friction_multiplier": 1.0,
         "age_years": 30,
-        "gender": "unspecified"
+        "gender": "unspecified",
+        "incline_degrees": 0.0
       }
     }
   },
