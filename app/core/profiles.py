@@ -12,6 +12,7 @@ LEGACY_PROFILE_PATH = APP_DIR.parent / "core" / "uinput" / "profiles.json"
 
 DEFAULT_PROFILE = {
     "axis": "REL_Y",
+    "omnidirectional": False,
     "invert": True,
     "deadzone": 2,
     "smoothing": 0.25,

@@ -5,6 +5,7 @@ from PyQt6 import QtWidgets
 from app.backends.uinput_backend import BUTTON_MAP
 from app.core.calibration import CalibrationWorker
 from app.core.device_scan import scan_pointer_devices
+from app.core.driver_install import install_maratron_driver, uninstall_maratron_driver
 from app.core.profiles import (
     DEFAULT_PROFILE,
     OUTPUT_STEAMVR,
@@ -60,6 +61,7 @@ class MainWindow(QtWidgets.QWidget):
         self.axis_combo = QtWidgets.QComboBox()
         self.axis_combo.addItems(["REL_Y", "REL_X"])
 
+        self.omnidirectional_check = QtWidgets.QCheckBox("Omnidirectional / use REL_X + REL_Y")
         self.invert_check = QtWidgets.QCheckBox("Invert Y axis")
 
         self.deadzone_spin = QtWidgets.QSpinBox()
@@ -123,6 +125,8 @@ class MainWindow(QtWidgets.QWidget):
         self.save_button = QtWidgets.QPushButton("Save")
         self.calibrate_button = QtWidgets.QPushButton("Auto calibrate")
         self.reset_health_button = QtWidgets.QPushButton("Reset health stats")
+        self.install_driver_button = QtWidgets.QPushButton("Install SteamVR driver")
+        self.uninstall_driver_button = QtWidgets.QPushButton("Uninstall SteamVR driver")
 
         self.build_layout()
         self.connect_signals()
@@ -148,6 +152,7 @@ class MainWindow(QtWidgets.QWidget):
         form.addRow("Treadmill mouse", device_layout)
         form.addRow("Profile", profile_buttons)
         form.addRow("Input axis", self.axis_combo)
+        form.addRow("", self.omnidirectional_check)
         form.addRow("", self.invert_check)
         form.addRow("Deadzone", self.deadzone_spin)
         form.addRow("Smoothing", self.smoothing_spin)
@@ -167,6 +172,10 @@ class MainWindow(QtWidgets.QWidget):
         buttons.addWidget(self.calibrate_button)
         buttons.addWidget(self.save_button)
 
+        steamvr_driver_buttons = QtWidgets.QHBoxLayout()
+        steamvr_driver_buttons.addWidget(self.install_driver_button)
+        steamvr_driver_buttons.addWidget(self.uninstall_driver_button)
+
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(form)
         layout.addWidget(QtWidgets.QLabel("Response curve: left-click/add/drag, right-click/delete point"))
@@ -182,6 +191,7 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.calories_label)
         layout.addWidget(self.reset_health_button)
         layout.addWidget(self.status_label)
+        layout.addLayout(steamvr_driver_buttons)
         layout.addLayout(buttons)
         self.setLayout(layout)
 
@@ -196,12 +206,15 @@ class MainWindow(QtWidgets.QWidget):
         self.save_button.clicked.connect(self.save)
         self.calibrate_button.clicked.connect(self.auto_calibrate)
         self.reset_health_button.clicked.connect(self.reset_health)
+        self.install_driver_button.clicked.connect(self.install_steamvr_driver)
+        self.uninstall_driver_button.clicked.connect(self.uninstall_steamvr_driver)
         self.curve_editor.pointsChanged.connect(self.on_curve_changed)
         self.device_combo.currentIndexChanged.connect(self.on_config_changed)
 
         widgets = [
             self.output_mode_combo,
             self.axis_combo,
+            self.omnidirectional_check,
             self.invert_check,
             self.deadzone_spin,
             self.smoothing_spin,
@@ -225,6 +238,8 @@ class MainWindow(QtWidgets.QWidget):
                 widget.currentIndexChanged.connect(self.on_config_changed)
             if hasattr(widget, "stateChanged"):
                 widget.stateChanged.connect(self.on_config_changed)
+
+        self.omnidirectional_check.stateChanged.connect(self.update_axis_controls)
 
     def current_profile_name(self):
         return self.profile_combo.currentText() or self.data["active_profile"]
@@ -259,6 +274,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.output_mode_combo.setCurrentIndex(self.output_mode_combo.findData(self.data.get("output_mode", OUTPUT_UINPUT)))
         self.axis_combo.setCurrentText(profile.get("axis", "REL_Y"))
+        self.omnidirectional_check.setChecked(bool(profile.get("omnidirectional", False)))
         self.invert_check.setChecked(bool(profile.get("invert", True)))
         self.deadzone_spin.setValue(int(profile.get("deadzone", 2)))
         self.smoothing_spin.setValue(float(profile.get("smoothing", 0.25)))
@@ -272,6 +288,7 @@ class MainWindow(QtWidgets.QWidget):
         self.weight_spin.setValue(float(health.get("user_weight_kg", 55.0)))
         self.calorie_factor_spin.setValue(float(health.get("calorie_factor", 0.75)))
         self.curve_editor.set_points(profile.get("curve_points", DEFAULT_PROFILE["curve_points"]))
+        self.update_axis_controls()
 
     def read_ui_to_profile(self):
         if self.device_combo.currentIndex() >= 0:
@@ -281,6 +298,7 @@ class MainWindow(QtWidgets.QWidget):
         name = self.current_profile_name()
         profile = self.data["profiles"][name]
         profile["axis"] = self.axis_combo.currentText()
+        profile["omnidirectional"] = self.omnidirectional_check.isChecked()
         profile["invert"] = self.invert_check.isChecked()
         profile["deadzone"] = self.deadzone_spin.value()
         profile["smoothing"] = self.smoothing_spin.value()
@@ -306,9 +324,13 @@ class MainWindow(QtWidgets.QWidget):
         if not self.profile_combo.currentText():
             return
 
+        self.update_axis_controls()
         self.read_ui_to_profile()
         if self.worker is not None:
             self.worker.update_config(make_profile_config(self.data))
+
+    def update_axis_controls(self):
+        self.axis_combo.setEnabled(not self.omnidirectional_check.isChecked())
 
     def on_profile_selected(self, name):
         if not name:
@@ -413,6 +435,24 @@ class MainWindow(QtWidgets.QWidget):
         self.distance_label.setText("Distance: 0 m")
         self.calories_label.setText("Calories: 0 kcal")
 
+    def install_steamvr_driver(self):
+        try:
+            install_maratron_driver()
+        except Exception as exc:
+            self.show_error(f"Failed to install SteamVR driver:\n{exc}")
+            return
+
+        self.status_label.setText("SteamVR driver installed. Restart SteamVR if it is already running.")
+
+    def uninstall_steamvr_driver(self):
+        try:
+            uninstall_maratron_driver()
+        except Exception as exc:
+            self.show_error(f"Failed to uninstall SteamVR driver:\n{exc}")
+            return
+
+        self.status_label.setText("SteamVR driver uninstalled. Restart SteamVR if it is already running.")
+
     def show_error(self, message):
         QtWidgets.QMessageBox.critical(self, "Maratron error", message)
 
@@ -430,6 +470,11 @@ class MainWindow(QtWidgets.QWidget):
     def closeEvent(self, event):
         self.stop()
         self.save()
+        if self.output_mode_combo.currentData() == OUTPUT_UINPUT:
+            try:
+                uninstall_maratron_driver()
+            except Exception:
+                pass
         super().closeEvent(event)
 
     @staticmethod
