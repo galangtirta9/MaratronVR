@@ -4,32 +4,32 @@
     "github": "https://github.com/galangtirta9/MaratronVR.git",
     "description": "SteamVR native driver + Python GUI for treadmill locomotion using optical mouse sensors",
     "language_stack": {
-      "python": "3.10+ (PyQt6, evdev, stdlib only — no pip strava client)",
+      "python": "3.10+ (PyQt6, evdev, stdlib only \u2014 no pip strava client)",
       "c++": "C++17, OpenVR/SteamVR driver API, cmake build"
     },
-    "last_commit": "9625f42 Add Strava upload integration",
-    "date": "2026-06-18"
+    "last_commit": "d16813f Fix calibration page: honest description, live readout labels",
+    "date": "2026-06-19"
   },
-
   "architecture": {
     "overview": "A Python application reads raw mouse movement from a treadmill-mounted optical mouse via evdev. The movement data is smoothed, curved, and sent to one of two output backends: a Linux uinput gamepad (for non-VR games), or a UDP socket to a native C++ SteamVR driver (for VR games). Health metrics (distance, speed, calories) are computed from DPI-based distance and MET formulas, with optional Strava upload."
   },
-
   "project_structure": {
     "app/backends/base.py": "Abstract MovementBackend class. Defines start(), send_movement(), stop().",
     "app/backends/uinput_backend.py": "UInput gamepad backend. Creates a /dev/uinput virtual Xbox-style gamepad with ABS_X/Y for joystick, EV_KEY for sprint button mapping.",
     "app/backends/steamvr_client.py": "Python UDP sender. Sends JSON {'move_x', 'move_y', 'sprint', 'speed'} to 127.0.0.1:9001 for the C++ SteamVR driver.",
     "app/backends/factory.py": "Backend factory. create_backend('uinput') returns UInputBackend, create_backend('steamvr') returns SteamVRClient.",
-    "app/core/calibration.py": "Auto-calibration: reads raw mouse events for 4 seconds, computes deadzone and max_raw_speed from statistical distribution.",
+    "app/core/calibration.py": "Auto-calibration: reads raw mouse events for 4 seconds, computes deadzone and max_raw_speed from statistical distribution. Emits noise samples for live GUI readout.",
     "app/core/curve.py": "Response curve logic. Takes normalized input (0.0-1.0) through editable spline points and applies the curve. Supports multi-point editing.",
     "app/core/device_scan.py": "Scans /dev/input/* for pointer devices using evdev, returns list of {label, path} for the GUI dropdown.",
-    "app/core/health.py": "HealthTracker class. Computes distance from mouse DPI + raw counts, speed in km/h from dt, MET-based calories with incline and friction multiplier, steps from height-derived stride length.",
-    "app/core/profiles.py": "Profile persistence and default values. Stores all config (axis, invert, deadzone, health, strava tokens) in app/profiles.json.",
+    "app/core/health.py": "HealthTracker class. Computes distance from mouse DPI + raw counts + configurable distance_calibration multiplier, speed in km/h from dt, MET-based calories with incline/friction multiplier, steps from height-derived stride length. Incline can be degrees (tan conversion) or legacy percentage grade.",
+    "app/core/profiles.py": "Profile persistence and default values. Stores all config (axis, invert, deadzone, health, strava tokens, distance_calibration, incline_degrees) in app/profiles.json.",
     "app/core/treadmill_reader.py": "TreadmillWorker QThread. Reads mouse events in a loop, applies deadzone/smoothing/curve, sends processed movement to backend via send_movement(), emits telemetry signals to GUI.",
     "app/core/driver_install.py": "SteamVR driver install/uninstall helper. Runs cmake configure/build/install, or removes drivers/maratron/.",
     "app/core/strava_client.py": "Strava OAuth2 + activity upload client. Pure stdlib: no external deps. Handles auth URL, code exchange, token refresh, activity POST.",
-    "app/gui/main_window.py": "Main PyQt6 window with all controls: device selection, output mode (uinput/steamvr), omnidirectional toggle, DPI presets, height, weight, incline, response curve editor, telemetry display, Strava auth/upload buttons, SteamVR install/uninstall buttons.",
+    "app/gui/main_window.py": "Main PyQt6 window with Steam Input-inspired layout. Top: centered pill tab bar (Dashboard, Calibration, Profiles, Stats). Footer: minimal Settings/Save. Settings opens as 5th tab with sidebar nav (System/Input Device/Movement/Sprint/Body/SteamVR/Strava/Developer). Settings toggles open/close on click; Escape closes. System tab shows OS/CPU/RAM/Python info.",
     "app/gui/curve_widget.py": "Interactive curve editor widget (QPainter-based). Left-click to add point, drag to move, right-click to delete.",
+    "app/gui/style.qss": "Steam Big Picture/Input-inspired Qt stylesheet. Dark palette, pill navigation tabs (nav_pill), footer pills (footer_pill), command cards, stat tiles, menu sidebar, scrollbar.",
+    "app/gui/treadmill_widget.py": "Code-drawn animated treadmill visual using QPainter and QTimer. Draws a dark treadmill deck with moving belt stripes whose animation speed follows live telemetry speed.",
     "backends/native-steamvr/": "Native C++ SteamVR driver source. Builds to driver_maratron.so.",
     "backends/native-steamvr/driver_main.cpp": "HmdDriverFactory entry point. Returns MaratronServer and WatchdogServer.",
     "backends/native-steamvr/maratron_server.cpp/h": "Server provider. Creates UDP receiver on port 9001, registers MaratronDevice with SteamVR.",
@@ -41,11 +41,10 @@
     "backends/native-steamvr/resources/settings/default.vrsettings": "Driver settings. input_bindingui_mode=single_device, alwaysActivate=true.",
     "backends/native-steamvr/driver.vrdrivermanifest": "Driver manifest. name=maratron, alwaysActivate=true."
   },
-
   "confirmed_working": [
     "UInput gamepad backend works in flat games (joystick movement + sprint button)",
     "SteamVR native driver appears as separate device (maratron_treadmill, TrackedControllerRole_Treadmill)",
-    "SteamVR UDP pipeline: Python → UDP port 9001 → C++ RunFrame → SteamVR input",
+    "SteamVR UDP pipeline: Python \u2192 UDP port 9001 \u2192 C++ RunFrame \u2192 SteamVR input",
     "Joystick_left X and Y axes detected in SteamVR test controller UI",
     "Grip click detected in SteamVR test controller UI",
     "In-game locomotion confirmed working with variable speed",
@@ -53,18 +52,23 @@
     "Omnidirectional checkbox reads both REL_X and REL_Y simultaneously",
     "Height-based stride estimation replaced confusing stride input",
     "DPI preset dropdown with common OEM values (800-8000) plus custom option",
-    "Incline now in degrees with internal tan() conversion for MET formula",
-    "Mouse DPI-based distance calculation (0.0254 / dpi meters per count)",
+    "Incline in degrees with internal tan() conversion for MET formula; legacy percentage fallback",
+    "Mouse DPI-based distance calculation with configurable distance_calibration multiplier",
     "MET-based calorie calculation with incline, weight, friction, speed",
     "Session elapsed time tracking from Start to Stop",
-    "Automatic Strava activity type detection (Walk < 8 km/h, Run ≥ 8 km/h)",
-    "Strava client code exchange and token refresh unchanged"
+    "Automatic Strava activity type detection (Walk < 8 km/h, Run \u2265 8 km/h)",
+    "Strava client code exchange and token refresh",
+    "Pill tab navigation (Dashboard/Calibration/Profiles/Stats) centered with active/inactive styling",
+    "Settings page with sidebar nav: System info (OS/CPU/RAM/Python), Input Device, Movement, Sprint, Body & Sensor, SteamVR, Strava, Developer Diagnostics",
+    "Settings toggle button opens/closes on click; Escape key closes",
+    "Minimal footer bar with Settings pill and Save button",
+    "Calibration page: honest noise floor description with live Live noise/Max noise/Samples readout labels",
+    "Animated treadmill visual with belt speed animation",
+    "Dark QSS theme loaded from style.qss on startup"
   ],
-
   "known_limitations": [
     "SteamVR device always appears in device list once driver is installed (cannot hide at runtime)",
     "SteamVR driver requires restart to detect newly installed/uninstalled driver",
-    "GUI has no stylesheet (flat Qt default, no dark theme)",
     "UDP is fire-and-forget; C++ driver has no feedback channel to Python",
     "Polling rate field is stored but not used in speed calculation (uses actual dt instead)",
     "Strava OAuth requires user to copy-paste the authorization code from browser redirect",
@@ -73,9 +77,12 @@
     "Driver still uses vr_controller_vive_1_5 render model (shows as Vive wand in-game)",
     "Only SVG icon exists; missing proper PNG icon variants (icon_ready.png etc.)",
     "Legacy bindings file named legacydb_bindings_vive_controller.json (pretends to be Vive)",
-    "Watchdog provider is a no-op (exists but does nothing)"
+    "Watchdog provider is a no-op (exists but does nothing)",
+    "Calibration worker only does noise-floor measurement (keep belt still 4 sec); no multi-stage walk/run flow",
+    "Profile game cards are visual placeholders and not yet direct selectable profile actions",
+    "Pill tabs need custom widget for pill tab bar background; currently uses QPushButton checkable group",
+    "System info requires psutil for RAM/CPU details; shows hint without it"
   ],
-
   "hardware_baseline": {
     "sensor_type": "Optical mouse (USB), accessed via evdev /dev/input/event*",
     "typical_dpi": "800-3200 (default profile uses 1600)",
@@ -83,19 +90,18 @@
     "typical_axis": "REL_Y for forward/backward",
     "omnidirectional": "Both REL_X and REL_Y when checkbox is enabled"
   },
-
   "pending_tasks_priority": [
     {
       "priority": 1,
-      "area": "GUI Theming",
-      "task": "Apply Qt stylesheet (QSS) for dark Steam Big Picture-like theme",
-      "notes": "Create app/gui/style.qss, load via app.setStyleSheet() in main.py. Dark background (#0d0d0d), accent blue, rounded tiles, large fonts."
+      "area": "GUI Theming / Redesign",
+      "task": "Complete Figma-based design for the final UI vision",
+      "notes": "Current layout is functional but amateur spacing/padding. User wants to design in Figma first before further implementation."
     },
     {
       "priority": 2,
-      "area": "Strava UX Polish",
-      "task": "Add popup/tooltip explanations for health fields",
-      "notes": "Height explains stride derivation, incline explains degree→MET conversion, auto-detect explains Walk/Run threshold."
+      "area": "Calibration Flow",
+      "task": "Implement true multi-stage calibration (noise floor \u2192 slow walk \u2192 normal walk \u2192 run)",
+      "notes": "Current worker only measures noise floor for 4 seconds. Needs walk/run stages, progress feedback, joystick output test."
     },
     {
       "priority": 3,
@@ -113,44 +119,44 @@
       "priority": 5,
       "area": "Render Model",
       "task": "Replace vr_controller_vive_1_5 with simple custom render model or hide device",
-      "notes": "Prop_RenderModelName_String value determines what 3D model appears in SteamVR. A simple cube or ring would be better than a Vive wand."
+      "notes": "Prop_RenderModelName_String value determines what 3D model appears in SteamVR."
     },
     {
       "priority": 6,
+      "area": "Profile Cards UX",
+      "task": "Make game profile cards actionable",
+      "notes": "Cards should select/create/load profiles directly, show active status, support game icons."
+    },
+    {
+      "priority": 7,
       "area": "Legacy Bindings Cleanup",
       "task": "Rename legacydb_bindings_vive_controller.json to legacydb_bindings_maratron.json",
       "notes": "Update CMakeLists.txt install rule and driver.vrdrivermanifest if needed."
     },
     {
-      "priority": 7,
+      "priority": 8,
       "area": "Watchdog Cleanup",
       "task": "Remove watchdog.cpp/.h and its entry in driver_main.cpp if no-op is acceptable",
       "notes": "Some SteamVR versions may require a working watchdog for driver stability."
     },
     {
-      "priority": 8,
-      "area": "Driver Install UX",
-      "task": "Add feedback during cmake build (progress bar or terminal output)",
-      "notes": "Install takes 5-15 seconds. User sees nothing until it completes or fails."
-    },
-    {
       "priority": 9,
-      "area": "Calibration Enhancement",
-      "task": "Auto-detect mouse DPI by checking known sensor IDs or prompting user for model",
-      "notes": "Some optical sensors report resolution via evdev ABS_INFO. Could auto-populate DPI."
+      "area": "Strava UX Polish",
+      "task": "Add popup/tooltip explanations for health fields, auto-detect threshold",
+      "notes": "Height explains stride derivation, incline explains degree\u2192MET conversion."
     },
     {
       "priority": 10,
-      "area": "Strava Advanced",
-      "task": "Add elevation gain from incline + distance, Strava activity name customization, auto-upload toggle"
+      "area": "Connection Health UX",
+      "task": "Back status cards with real health checks",
+      "notes": "Sensor, virtual joystick, SteamVR, and Strava cards should reflect live backend state."
     }
   ],
-
   "build_and_install": {
     "prerequisites": ["python3-pip", "cmake", "g++", "libevdev-dev", "steamvr (installed via Steam)"],
     "pip_deps": "pip install PyQt6 evdev",
     "native_driver_build": "cd backends/native-steamvr && cmake -B build && cmake --build build && cmake --install build --prefix ~/.local/share/Steam/steamapps/common/SteamVR",
-    "or_via_gui": "Open Maratron app → click Install SteamVR Driver button",
+    "or_via_gui": "Open Maratron app \u2192 click Install SteamVR Driver button",
     "run": "python -m app from project root"
   }
 }
