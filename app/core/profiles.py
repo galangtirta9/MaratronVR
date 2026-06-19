@@ -1,3 +1,4 @@
+
 import copy
 import json
 from pathlib import Path
@@ -5,6 +6,7 @@ from pathlib import Path
 CONTROLLER_NAME = "Maratron Treadmill"
 OUTPUT_UINPUT = "uinput"
 OUTPUT_STEAMVR = "steamvr"
+OUTPUT_HIDMAESTRO = "hidmaestro"
 
 APP_DIR = Path(__file__).resolve().parents[1]
 PROFILE_PATH = APP_DIR / "profiles.json"

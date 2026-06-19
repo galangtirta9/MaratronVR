@@ -12,6 +12,7 @@ from app.core.device_scan import scan_pointer_devices
 from app.core.driver_install import install_maratron_driver, uninstall_maratron_driver
 from app.core.profiles import (
     DEFAULT_PROFILE,
+    OUTPUT_HIDMAESTRO,
     OUTPUT_STEAMVR,
     OUTPUT_UINPUT,
     load_data,
@@ -27,6 +28,7 @@ from app.gui.treadmill_widget import TreadmillWidget
 OUTPUT_LABELS = {
     OUTPUT_UINPUT: "UInput Gamepad",
     OUTPUT_STEAMVR: "SteamVR Driver",
+    OUTPUT_HIDMAESTRO: "HIDMaestro (Windows)",
 }
 
 STEAMVR_BUTTONS = {
@@ -77,6 +79,7 @@ class MainWindow(QtWidgets.QWidget):
         self.output_mode_combo = QtWidgets.QComboBox()
         self.output_mode_combo.addItem(OUTPUT_LABELS[OUTPUT_UINPUT], OUTPUT_UINPUT)
         self.output_mode_combo.addItem(OUTPUT_LABELS[OUTPUT_STEAMVR], OUTPUT_STEAMVR)
+        self.output_mode_combo.addItem(OUTPUT_LABELS.get(OUTPUT_HIDMAESTRO, "HIDMaestro (Windows)"), OUTPUT_HIDMAESTRO)
 
         self.device_combo = QtWidgets.QComboBox()
         self.refresh_devices_button = QtWidgets.QPushButton("Refresh")
