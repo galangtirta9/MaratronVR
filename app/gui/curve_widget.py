@@ -8,7 +8,7 @@ class CurveEditor(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(360, 180)
+        self.setMinimumSize(420, 220)
         self.points = normalize_curve_points([
             [0.0, 0.0],
             [0.25, 0.12],
@@ -17,7 +17,7 @@ class CurveEditor(QtWidgets.QWidget):
             [1.0, 1.0],
         ])
         self.drag_index = None
-        self.margin = 16
+        self.margin = 22
 
     def set_points(self, points):
         self.points = normalize_curve_points(points)
@@ -41,16 +41,18 @@ class CurveEditor(QtWidgets.QWidget):
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QtGui.QColor("#1e1e1e"))
+        painter.fillRect(self.rect(), QtGui.QColor("#0b1118"))
 
-        painter.setPen(QtGui.QPen(QtGui.QColor("#333333"), 1))
+        grid_pen = QtGui.QPen(QtGui.QColor("#202b37"), 1)
+        grid_pen.setCosmetic(True)
+        painter.setPen(grid_pen)
         for index in range(11):
             x = self.margin + index * (self.width() - self.margin * 2) / 10
             y = self.margin + index * (self.height() - self.margin * 2) / 10
             painter.drawLine(int(x), self.margin, int(x), self.height() - self.margin)
             painter.drawLine(self.margin, int(y), self.width() - self.margin, int(y))
 
-        painter.setPen(QtGui.QPen(QtGui.QColor("#777777"), 1))
+        painter.setPen(QtGui.QPen(QtGui.QColor("#536071"), 1))
         painter.drawRect(
             self.margin,
             self.margin,
@@ -59,15 +61,23 @@ class CurveEditor(QtWidgets.QWidget):
         )
 
         points = [self.to_screen(x, y) for x, y in self.points]
-        painter.setPen(QtGui.QPen(QtGui.QColor("#f0d26a"), 4))
+        shadow_pen = QtGui.QPen(QtGui.QColor("#0f202d"), 8)
+        shadow_pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(shadow_pen)
+        for start, end in zip(points, points[1:]):
+            painter.drawLine(start, end)
+
+        curve_pen = QtGui.QPen(QtGui.QColor("#dfe8f4"), 4)
+        curve_pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(curve_pen)
         for start, end in zip(points, points[1:]):
             painter.drawLine(start, end)
 
         for index, point in enumerate(points):
-            color = "#ffdd77" if index == self.drag_index else "#ffffff"
+            color = "#1a9fff" if index == self.drag_index else "#f7f8fb"
             painter.setBrush(QtGui.QColor(color))
-            painter.setPen(QtGui.QPen(QtGui.QColor("#111111"), 2))
-            painter.drawEllipse(point, 7, 7)
+            painter.setPen(QtGui.QPen(QtGui.QColor("#05090d"), 2))
+            painter.drawEllipse(point, 9, 9)
 
     def nearest_point(self, pos):
         best = None

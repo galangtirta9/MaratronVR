@@ -1,16 +1,21 @@
-import logging
 import sys
+from pathlib import Path
 
 from PyQt6 import QtWidgets
-
 from app.gui.main_window import MainWindow
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     app = QtWidgets.QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
+
+    # Load dark theme stylesheet
+    style_path = Path(__file__).resolve().parent / "gui" / "style.qss"
+    if style_path.exists():
+        with open(style_path) as f:
+            app.setStyleSheet(f.read())
+
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec())
 
 

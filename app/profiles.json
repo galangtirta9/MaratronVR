@@ -4,7 +4,7 @@
     "Alyx": {
       "axis": "REL_Y",
       "omnidirectional": false,
-      "invert": true,
+      "invert": false,
       "deadzone": 0,
       "smoothing": 0.01,
       "max_raw_speed": 1.0,
@@ -36,16 +36,17 @@
         ]
       ],
       "health": {
-        "height_cm": 173.0,
-        "stride_length_m": 0.71795,
-        "user_weight_kg": 55.0,
+        "height_cm": 172.5,
+        "stride_length_m": 0.7158749999999999,
+        "user_weight_kg": 54.5,
         "calorie_factor": 0.75,
-        "mouse_dpi": 800.0,
-        "polling_rate_hz": 1000.0,
+        "distance_calibration": 1.0,
+        "mouse_dpi": 3200.0,
+        "polling_rate_hz": 750.0,
+        "incline_degrees": 0.0,
         "manual_friction_multiplier": 0.65,
         "age_years": 30,
-        "gender": "unspecified",
-        "incline_degrees": 0.0
+        "gender": "female"
       }
     },
     "Skyrim": {
@@ -87,19 +88,29 @@
         "stride_length_m": 0.72,
         "user_weight_kg": 55.0,
         "calorie_factor": 0.75,
+        "distance_calibration": 1.0,
         "mouse_dpi": 1600.0,
         "polling_rate_hz": 1000.0,
+        "incline_degrees": 0.0,
         "manual_friction_multiplier": 1.0,
         "age_years": 30,
-        "gender": "unspecified",
-        "incline_degrees": 0.0
+        "gender": "unspecified"
       }
     }
   },
-  "selected_device_path": "",
-  "output_mode": "uinput",
+  "selected_device_path": "/dev/input/event9",
+  "output_mode": "steamvr",
   "steamvr": {
     "host": "127.0.0.1",
     "port": 9001
+  },
+  "strava": {
+    "client_id": "",
+    "client_secret": "",
+    "access_token": "",
+    "refresh_token": "",
+    "expires_at": 0,
+    "activity_type": "Walk",
+    "auto_detect_run_kmh": 8.0
   }
 }

@@ -54,6 +54,9 @@ class MainWindow(QtWidgets.QWidget):
         self.last_session = None
         self.session_elapsed_seconds = 0
         self._settings_open = False
+        self._settings_history = []
+        self._settings_history_blocked = False
+        self._ctrl_pressed_for_settings = False
 
         self.setWindowTitle("MaratronVR")
         self.resize(1280, 760)
@@ -62,6 +65,14 @@ class MainWindow(QtWidgets.QWidget):
         # --- All widgets ---
         self.controller_label = QtWidgets.QLabel("MARATRON")
         self.controller_label.setObjectName("app_title")
+        self.profile_avatar_label = QtWidgets.QLabel("M")
+        self.profile_avatar_label.setObjectName("profile_avatar")
+        self.profile_avatar_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.profile_avatar_label.setFixedSize(38, 34)
+        self.session_status_pill = QtWidgets.QLabel("")
+        self.session_status_pill.setObjectName("session_status_pill")
+        self.session_status_pill.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.session_status_pill.setFixedSize(10, 10)
 
         self.output_mode_combo = QtWidgets.QComboBox()
         self.output_mode_combo.addItem(OUTPUT_LABELS[OUTPUT_UINPUT], OUTPUT_UINPUT)
@@ -175,24 +186,49 @@ class MainWindow(QtWidgets.QWidget):
         self.load_profile_to_ui()
 
     def build_layout(self):
-        # --- Pill tab bar (centered, rounded, Steam-style) ---
-        self.tab_bar = QtWidgets.QWidget()
-        self.tab_bar.setObjectName("tab_bar")
-        tab_layout = QtWidgets.QHBoxLayout(self.tab_bar)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
-        tab_layout.setSpacing(6)
-        tab_layout.addStretch(1)
+        # --- Steam Input inspired top header (keyboard-only, no controller prompts) ---
+        self.header = QtWidgets.QFrame()
+        self.header.setObjectName("steam_header")
+        header_layout = QtWidgets.QVBoxLayout(self.header)
+        header_layout.setContentsMargins(48, 12, 48, 14)
+        header_layout.setSpacing(14)
+
+        top_row = QtWidgets.QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(12)
+        top_row.addWidget(self.controller_label)
+        top_row.addStretch(1)
+        top_row.addWidget(self.session_status_pill)
+        top_row.addStretch(1)
+        self.clock_label.setObjectName("header_clock")
+        top_row.addWidget(self.clock_label)
+        top_row.addWidget(self.profile_avatar_label)
+        header_layout.addLayout(top_row)
+
+        nav_row = QtWidgets.QHBoxLayout()
+        nav_row.setContentsMargins(0, 0, 0, 0)
+        nav_row.setSpacing(0)
+        self.previous_tab_keycap = QtWidgets.QLabel("Q")
+        self.previous_tab_keycap.setObjectName("nav_keycap")
+        self.previous_tab_keycap.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        nav_row.addWidget(self.previous_tab_keycap)
+        nav_row.addStretch(1)
         self.tab_buttons = []
         for name in ["Dashboard", "Calibration", "Profiles", "Stats"]:
-            btn = QtWidgets.QPushButton(name)
+            btn = QtWidgets.QPushButton(name.upper())
             btn.setObjectName("nav_pill")
             btn.setCheckable(True)
             btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, n=name: self.switch_tab(n))
-            tab_layout.addWidget(btn)
+            nav_row.addWidget(btn)
             self.tab_buttons.append(btn)
-        tab_layout.addStretch(1)
+        nav_row.addStretch(1)
+        self.next_tab_keycap = QtWidgets.QLabel("E")
+        self.next_tab_keycap.setObjectName("nav_keycap")
+        self.next_tab_keycap.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        nav_row.addWidget(self.next_tab_keycap)
         self.tab_buttons[0].setChecked(True)
+        header_layout.addLayout(nav_row)
 
         # --- Content pages ---
         self.content_stack = QtWidgets.QStackedWidget()
@@ -204,28 +240,43 @@ class MainWindow(QtWidgets.QWidget):
         self.settings_page = self._build_settings_page()
         self.content_stack.addWidget(self.settings_page)
 
-        # --- Footer (minimal Steam-style) ---
-        footer = QtWidgets.QHBoxLayout()
-        footer.setContentsMargins(16, 4, 16, 4)
-        footer.setSpacing(8)
-        self.settings_toggle_btn = QtWidgets.QPushButton("Settings")
-        self.settings_toggle_btn.setObjectName("footer_pill")
-        self.settings_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self.settings_toggle_btn.clicked.connect(self.toggle_settings)
+        # --- Footer (Steam-style keyboard navigation, no logo/action saving) ---
+        footer_frame = QtWidgets.QFrame()
+        footer_frame.setObjectName("steam_footer")
+        footer = QtWidgets.QHBoxLayout(footer_frame)
+        footer.setContentsMargins(14, 6, 22, 6)
+        footer.setSpacing(10)
+
+        self.settings_toggle_btn = self._footer_shortcut_hint("Ctrl", "Settings", self.toggle_settings)
+        self.settings_toggle_btn.setToolTip("Click or tap Ctrl to open Settings")
         footer.addWidget(self.settings_toggle_btn)
         footer.addStretch(1)
-        footer.addWidget(self.save_button)
+
+        footer.addWidget(self._footer_shortcut_hint("Backspace", "Back", self.go_back))
+        footer.addSpacing(18)
+        footer.addWidget(self._footer_shortcut_hint("Esc", "Escape", self.close_settings))
 
         # --- Main layout ---
         shell = QtWidgets.QVBoxLayout()
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
-        shell.addWidget(self.tab_bar)
+        shell.addWidget(self.header)
         shell.addWidget(self.content_stack, 1)
-        shell.addLayout(footer)
+        shell.addWidget(footer_frame)
         self.setLayout(shell)
 
         QtGui.QShortcut(QtGui.QKeySequence("Escape"), self, activated=self.close_settings)
+        QtGui.QShortcut(QtGui.QKeySequence("Backspace"), self, activated=self.go_back)
+        QtGui.QShortcut(QtGui.QKeySequence("Q"), self, activated=lambda: self.cycle_tab(-1))
+        QtGui.QShortcut(QtGui.QKeySequence("E"), self, activated=lambda: self.cycle_tab(1))
+        QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self, activated=lambda: self.cycle_tab(-1))
+        QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self, activated=lambda: self.cycle_tab(1))
+        QtGui.QShortcut(QtGui.QKeySequence("1"), self, activated=lambda: self.switch_tab("Dashboard"))
+        QtGui.QShortcut(QtGui.QKeySequence("2"), self, activated=lambda: self.switch_tab("Calibration"))
+        QtGui.QShortcut(QtGui.QKeySequence("3"), self, activated=lambda: self.switch_tab("Profiles"))
+        QtGui.QShortcut(QtGui.QKeySequence("4"), self, activated=lambda: self.switch_tab("Stats"))
+        self.update_profile_header()
+        self.update_session_status(False)
 
     def _make_page(self):
         sc = QtWidgets.QScrollArea()
@@ -250,6 +301,40 @@ class MainWindow(QtWidgets.QWidget):
         t = QtWidgets.QFrame(); t.setObjectName("stat_tile")
         l = QtWidgets.QVBoxLayout(t); l.setContentsMargins(14, 10, 14, 10); label.setParent(t); l.addWidget(label)
         return t
+
+    def _footer_shortcut_hint(self, key, action, callback=None):
+        hint = QtWidgets.QFrame()
+        hint.setObjectName("footer_shortcut_button" if callback else "footer_shortcut_hint")
+        hint.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
+        layout = QtWidgets.QHBoxLayout(hint)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        keycap = QtWidgets.QLabel(key)
+        keycap.setObjectName("footer_keycap")
+        keycap.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        label = QtWidgets.QLabel(action.upper())
+        label.setObjectName("footer_action_label")
+
+        layout.addWidget(keycap)
+        layout.addWidget(label)
+
+        if callback:
+            hint.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+
+            def activate(event):
+                if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                    callback()
+                    event.accept()
+                else:
+                    event.ignore()
+
+            hint.mouseReleaseEvent = activate
+            keycap.mouseReleaseEvent = activate
+            label.mouseReleaseEvent = activate
+
+        return hint
 
     def _build_dashboard(self):
         sc = self._make_page()
@@ -323,13 +408,39 @@ class MainWindow(QtWidgets.QWidget):
         lay = sc.widget().layout()
         lay.setContentsMargins(24, 12, 24, 12)
 
+        # Settings header
+        settings_header = QtWidgets.QFrame()
+        settings_header.setObjectName("settings_header")
+        settings_header_layout = QtWidgets.QHBoxLayout(settings_header)
+        settings_header_layout.setContentsMargins(0, 0, 0, 10)
+        settings_title = QtWidgets.QLabel("SETTINGS")
+        settings_title.setObjectName("settings_title")
+        settings_header_layout.addWidget(settings_title)
+        settings_header_layout.addStretch(1)
+        lay.addWidget(settings_header)
+
         # Sidebar + content
         hbox = QtWidgets.QHBoxLayout(); hbox.setSpacing(20)
         sidebar = QtWidgets.QFrame(); sidebar.setObjectName("menu_sidebar")
         sl = QtWidgets.QVBoxLayout(sidebar); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(2)
         self.menu_list = QtWidgets.QListWidget(); self.menu_list.setObjectName("menu_list")
-        for label in ["System", "Input Device", "Movement", "Sprint", "Body & Sensor", "SteamVR", "Strava", "Developer"]:
-            self.menu_list.addItem(f"  {label}")
+        self.menu_list.setIconSize(QtCore.QSize(20, 20))
+        entries = [
+            ("System", "system"),
+            ("Input Device", "input_device"),
+            ("Movement", "movement"),
+            ("Sprint", "sprint"),
+            ("Body & Sensor", "body_sensor"),
+            ("SteamVR", "steamvr"),
+            ("Strava", "strava"),
+            ("Developer", "developer"),
+        ]
+        for label, icon_name in entries:
+            item = QtWidgets.QListWidgetItem(f"  {label}")
+            icon_path = Path(__file__).resolve().parent.parent.parent / "assets" / "icons" / f"{icon_name}.svg"
+            if icon_path.exists():
+                item.setIcon(QtGui.QIcon(str(icon_path)))
+            self.menu_list.addItem(item)
         self.menu_list.setCurrentRow(0)
         sl.addWidget(self.menu_list)
         hbox.addWidget(sidebar, 2)
@@ -404,7 +515,7 @@ class MainWindow(QtWidgets.QWidget):
         ]:
             self.menu_stack.addWidget(page)
 
-        self.menu_list.currentRowChanged.connect(self.menu_stack.setCurrentIndex)
+        self.menu_list.currentRowChanged.connect(self.on_settings_entry_changed)
         return sc
 
     def _section_title(self, text):
@@ -424,12 +535,32 @@ class MainWindow(QtWidgets.QWidget):
         idx = ["Dashboard", "Calibration", "Profiles", "Stats"].index(name)
         self.content_stack.setCurrentIndex(idx)
         for b in self.tab_buttons:
-            b.setChecked(b.text() == name)
+            b.setChecked(b.text() == name.upper())
         self._settings_open = False
+
+    def cycle_tab(self, direction):
+        tabs = ["Dashboard", "Calibration", "Profiles", "Stats"]
+        current = self.content_stack.currentIndex()
+        if current not in range(len(tabs)):
+            current = 0
+        self.switch_tab(tabs[(current + direction) % len(tabs)])
+
+    def update_profile_header(self):
+        profile_name = self.current_profile_name()
+        self.controller_label.setText(f"Profile: {profile_name}")
+        initial = (profile_name.strip()[:1] or "M").upper()
+        self.profile_avatar_label.setText(initial)
+
+    def update_session_status(self, active):
+        self.session_status_pill.setText("")
+        self.session_status_pill.setProperty("status", "active" if active else "inactive")
+        self.session_status_pill.style().unpolish(self.session_status_pill)
+        self.session_status_pill.style().polish(self.session_status_pill)
 
     def toggle_settings(self):
         self._settings_open = not self._settings_open
         if self._settings_open:
+            self._settings_history.clear()
             self.content_stack.setCurrentIndex(4)  # settings page
         else:
             # Return to current dashboard
@@ -441,6 +572,58 @@ class MainWindow(QtWidgets.QWidget):
     def close_settings(self):
         if self._settings_open:
             self.toggle_settings()
+
+    def go_back(self):
+        if self._settings_open:
+            self.back_settings_entry()
+
+    def on_settings_entry_changed(self, row):
+        if row < 0:
+            return
+        previous_row = self.menu_stack.currentIndex()
+        if not self._settings_history_blocked and previous_row >= 0 and previous_row != row:
+            self._settings_history.append(previous_row)
+        self.menu_stack.setCurrentIndex(row)
+
+    def back_settings_entry(self):
+        if not self._settings_history:
+            return
+        previous_row = self._settings_history.pop()
+        self._settings_history_blocked = True
+        try:
+            self.menu_list.setCurrentRow(previous_row)
+            self.menu_stack.setCurrentIndex(previous_row)
+        finally:
+            self._settings_history_blocked = False
+
+    def keyPressEvent(self, event):
+        if event.isAutoRepeat():
+            super().keyPressEvent(event)
+            return
+
+        if event.key() in (QtCore.Qt.Key.Key_Control, QtCore.Qt.Key.Key_Meta):
+            self._ctrl_pressed_for_settings = True
+            event.accept()
+            return
+
+        if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self._ctrl_pressed_for_settings = False
+
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.isAutoRepeat():
+            super().keyReleaseEvent(event)
+            return
+
+        if event.key() in (QtCore.Qt.Key.Key_Control, QtCore.Qt.Key.Key_Meta):
+            if self._ctrl_pressed_for_settings:
+                self.toggle_settings()
+                event.accept()
+            self._ctrl_pressed_for_settings = False
+            return
+
+        super().keyReleaseEvent(event)
 
     # --- Remaining methods unchanged ---
     def connect_signals(self):
@@ -535,6 +718,7 @@ class MainWindow(QtWidgets.QWidget):
         self.update_axis_controls(); self.update_stride_estimate(); self.update_dpi_controls()
         self.selected_profile_label.setText(f"Profile: {self.data['active_profile']}")
         self.strava_status_label.setText("Strava: Connected" if self.data.get("strava", {}).get("access_token") else "Strava: Not Connected")
+        self.update_profile_header()
 
     def read_ui_to_profile(self):
         if self.device_combo.currentIndex() >= 0:
@@ -603,7 +787,7 @@ class MainWindow(QtWidgets.QWidget):
 
     def on_profile_selected(self, name):
         if not name: return
-        self.data["active_profile"] = name; self.load_profile_to_ui(); self.on_config_changed()
+        self.data["active_profile"] = name; self.load_profile_to_ui(); self.update_profile_header(); self.on_config_changed()
 
     def new_profile(self):
         name, ok = QtWidgets.QInputDialog.getText(self, "New profile", "Name:")
@@ -640,6 +824,7 @@ class MainWindow(QtWidgets.QWidget):
         self.save()
         self.session_start_time = dt.datetime.now().replace(microsecond=0)
         self.session_elapsed_seconds = 0; self.session_state_label.setText("Running")
+        self.update_session_status(True)
         self.joystick_status_label.setText("Joystick: Active"); self.session_timer.start(1000)
         self.last_telemetry = None; self.last_session = None
         self.worker = TreadmillWorker(make_profile_config(self.data))
@@ -652,6 +837,7 @@ class MainWindow(QtWidgets.QWidget):
         if self.worker is not None:
             self.worker.stop(); self.worker.wait(1500); self.worker = None
             self.session_timer.stop(); self.session_state_label.setText("Ready")
+            self.update_session_status(False)
             self.treadmill_visual.set_output_percent(0)
             self.joystick_status_label.setText("Joystick: Idle")
             self.treadmill_visual.set_speed(0.0); self.treadmill_visual.set_output_percent(0)

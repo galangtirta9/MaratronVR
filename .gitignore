@@ -42,3 +42,4 @@ core/hlalyx-driver/
 *.swo
 .DS_Store
 Thumbs.db
+core/HIDMaestro/
