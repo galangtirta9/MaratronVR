@@ -7,7 +7,7 @@
       "python": "3.10+ (PyQt6, evdev, stdlib only \u2014 no pip strava client)",
       "c++": "C++17, OpenVR/SteamVR driver API, cmake build"
     },
-    "last_commit": "a050869 Checkpoint: pre\u2011Windows port snapshot",
+    "last_commit": "a050869 Checkpoint: pre-Windows port snapshot",
     "date": "2026-06-19",
     "last_updated": "2026-06-19T13:32:00+07:00",
     "last_ui_handoff": "Steam-like keyboard-only header redesign and polish"
@@ -92,7 +92,8 @@
     "System info requires psutil for RAM/CPU details; shows hint without it",
     "Header profile avatar is still a local placeholder initial; Strava athlete profile picture fetch/storage is not implemented yet",
     "Header typography is close to the Steam reference but may need further font-family tuning if exact Steam visual matching is required",
-    "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated. Windows port requires a new Python backend (hidmaestro_backend.py) and a C# bridge process."
+    "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated. Windows port requires a new Python backend (hidmaestro_backend.py) and a C# bridge process.",
+    "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated."
   ],
   "hardware_baseline": {
     "sensor_type": "Optical mouse (USB), accessed via evdev /dev/input/event*",
@@ -102,6 +103,12 @@
     "omnidirectional": "Both REL_X and REL_Y when checkbox is enabled"
   },
   "pending_tasks_priority": [
+    {
+      "priority": 0,
+      "area": "Windows Port (HIDMaestro)",
+      "task": "Create MaratronBridge.exe C# project + Python hidmaestro_backend.py",
+      "notes": "Python -> UDP/9003 -> C# -> HIDMaestro SDK. HMOemNameOverride.Set() for name."
+    },
     {
       "priority": 0,
       "area": "Windows Port (HIDMaestro)",
