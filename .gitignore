@@ -43,3 +43,4 @@ core/hlalyx-driver/
 .DS_Store
 Thumbs.db
 core/HIDMaestro/
+docs/handoff.json
