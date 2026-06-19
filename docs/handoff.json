@@ -4,10 +4,10 @@
     "github": "https://github.com/galangtirta9/MaratronVR.git",
     "description": "SteamVR native driver + Python GUI for treadmill locomotion using optical mouse sensors",
     "language_stack": {
-      "python": "3.10+ (PyQt6, evdev, stdlib only — no pip strava client)",
+      "python": "3.10+ (PyQt6, evdev, stdlib only \u2014 no pip strava client)",
       "c++": "C++17, OpenVR/SteamVR driver API, cmake build"
     },
-    "last_commit": "d16813f Fix calibration page: honest description, live readout labels",
+    "last_commit": "a050869 Checkpoint: pre\u2011Windows port snapshot",
     "date": "2026-06-19",
     "last_updated": "2026-06-19T13:32:00+07:00",
     "last_ui_handoff": "Steam-like keyboard-only header redesign and polish"
@@ -46,7 +46,7 @@
   "confirmed_working": [
     "UInput gamepad backend works in flat games (joystick movement + sprint button)",
     "SteamVR native driver appears as separate device (maratron_treadmill, TrackedControllerRole_Treadmill)",
-    "SteamVR UDP pipeline: Python → UDP port 9001 → C++ RunFrame → SteamVR input",
+    "SteamVR UDP pipeline: Python \u2192 UDP port 9001 \u2192 C++ RunFrame \u2192 SteamVR input",
     "Joystick_left X and Y axes detected in SteamVR test controller UI",
     "Grip click detected in SteamVR test controller UI",
     "In-game locomotion confirmed working with variable speed",
@@ -58,7 +58,7 @@
     "Mouse DPI-based distance calculation with configurable distance_calibration multiplier",
     "MET-based calorie calculation with incline, weight, friction, speed",
     "Session elapsed time tracking from Start to Stop",
-    "Automatic Strava activity type detection (Walk < 8 km/h, Run ≥ 8 km/h)",
+    "Automatic Strava activity type detection (Walk < 8 km/h, Run \u2265 8 km/h)",
     "Strava client code exchange and token refresh",
     "Pill tab navigation (Dashboard/Calibration/Profiles/Stats) centered with active/inactive styling",
     "Settings page with sidebar nav: System info (OS/CPU/RAM/Python), Input Device, Movement, Sprint, Body & Sensor, SteamVR, Strava, Developer Diagnostics",
@@ -91,7 +91,8 @@
     "Pill tabs need custom widget for pill tab bar background; currently uses QPushButton checkable group",
     "System info requires psutil for RAM/CPU details; shows hint without it",
     "Header profile avatar is still a local placeholder initial; Strava athlete profile picture fetch/storage is not implemented yet",
-    "Header typography is close to the Steam reference but may need further font-family tuning if exact Steam visual matching is required"
+    "Header typography is close to the Steam reference but may need further font-family tuning if exact Steam visual matching is required",
+    "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated. Windows port requires a new Python backend (hidmaestro_backend.py) and a C# bridge process."
   ],
   "hardware_baseline": {
     "sensor_type": "Optical mouse (USB), accessed via evdev /dev/input/event*",
@@ -102,6 +103,12 @@
   },
   "pending_tasks_priority": [
     {
+      "priority": 0,
+      "area": "Windows Port (HIDMaestro)",
+      "task": "Create MaratronBridge.exe C# project + Python hidmaestro_backend.py",
+      "notes": "Architecture: Python -> UDP/9003 -> C# bridge -> HIDMaestro SDK -> Windows virtual gamepad. HMOemNameOverride.Set() for controller name. HMGamepadState.Axes for movement. HMGamepadState.Buttons for sprint."
+    },
+    {
       "priority": 1,
       "area": "GUI Theming / Redesign",
       "task": "Complete Figma-based design for the final UI vision",
@@ -110,7 +117,7 @@
     {
       "priority": 2,
       "area": "Calibration Flow",
-      "task": "Implement true multi-stage calibration (noise floor → slow walk → normal walk → run)",
+      "task": "Implement true multi-stage calibration (noise floor \u2192 slow walk \u2192 normal walk \u2192 run)",
       "notes": "Current worker only measures noise floor for 4 seconds. Needs walk/run stages, progress feedback, joystick output test."
     },
     {
@@ -153,7 +160,7 @@
       "priority": 9,
       "area": "Strava UX Polish",
       "task": "Add popup/tooltip explanations for health fields, auto-detect threshold",
-      "notes": "Height explains stride derivation, incline explains degree→MET conversion."
+      "notes": "Height explains stride derivation, incline explains degree\u2192MET conversion."
     },
     {
       "priority": 10,
@@ -178,7 +185,7 @@
     ],
     "pip_deps": "pip install PyQt6 evdev",
     "native_driver_build": "cd backends/native-steamvr && cmake -B build && cmake --build build && cmake --install build --prefix ~/.local/share/Steam/steamapps/common/SteamVR",
-    "or_via_gui": "Open Maratron app → click Install SteamVR Driver button",
+    "or_via_gui": "Open Maratron app \u2192 click Install SteamVR Driver button",
     "run": "python -m app from project root"
   },
   "change_log": [
