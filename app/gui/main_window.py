@@ -1,8 +1,9 @@
 import copy
 import datetime as dt
 import webbrowser
+from pathlib import Path
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from app.backends.uinput_backend import BUTTON_MAP
 from app.core.calibration import CalibrationWorker
@@ -19,6 +20,7 @@ from app.core.profiles import (
 from app.core.strava_client import build_authorization_url, exchange_code, upload_activity
 from app.core.treadmill_reader import TreadmillWorker
 from app.gui.curve_widget import CurveEditor
+from app.gui.treadmill_widget import TreadmillWidget
 
 
 OUTPUT_LABELS = {
@@ -38,6 +40,43 @@ DPI_PRESETS = [800, 1000, 1200, 1600, 2000, 2400, 3200, 4000, 4800, 6400, 8000]
 CUSTOM_DPI_VALUE = "custom"
 
 
+class CollapsibleSection(QtWidgets.QWidget):
+    """A clickable header that toggles visibility of its content panel."""
+    def __init__(self, title, parent=None):
+        super().__init__(parent)
+        self._collapsed = True
+        self._content = QtWidgets.QWidget()
+        self._content.setVisible(False)
+
+        self._header = QtWidgets.QPushButton(f"\u25b8 {title}")
+        self._header.setObjectName("section_header")
+        self._header.setStyleSheet(
+            "QPushButton#section_header {"
+            "  background-color: #1a1a1a; border: 1px solid #2a2a2a;"
+            "  border-radius: 6px; padding: 8px 12px; font-size: 13px;"
+            "  font-weight: 600; text-align: left; color: #b0b0b0;"
+            "}"
+            "QPushButton#section_header:hover { border-color: #4a4a4a; }"
+        )
+        self._header.clicked.connect(self._toggle)
+
+        vbox = QtWidgets.QVBoxLayout(self)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+        vbox.addWidget(self._header)
+        vbox.addWidget(self._content)
+
+    def _toggle(self):
+        self._collapsed = not self._collapsed
+        self._content.setVisible(not self._collapsed)
+        arrow = "\u25be" if not self._collapsed else "\u25b8"
+        base = self._header.text().lstrip("\u25b8\u25be ")
+        self._header.setText(f"{arrow} {base}")
+
+    def content(self):
+        return self._content
+
+
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -49,9 +88,11 @@ class MainWindow(QtWidgets.QWidget):
         self.session_start_time = None
         self.last_telemetry = None
         self.last_session = None
+        self.session_elapsed_seconds = 0
 
-        self.setWindowTitle("Maratron Treadmill")
-        self.resize(580, 820)
+        self.setWindowTitle("MaratronVR Controller Settings")
+        self.resize(1280, 760)
+        self.setMinimumSize(1024, 640)
 
         self.controller_label = QtWidgets.QLabel("Controller: Maratron Treadmill")
 
@@ -67,6 +108,7 @@ class MainWindow(QtWidgets.QWidget):
         self.duplicate_profile_button = QtWidgets.QPushButton("Duplicate")
         self.delete_profile_button = QtWidgets.QPushButton("Delete")
 
+        # --- Settings section widgets ---
         self.axis_combo = QtWidgets.QComboBox()
         self.axis_combo.addItems(["REL_Y", "REL_X"])
 
@@ -100,6 +142,7 @@ class MainWindow(QtWidgets.QWidget):
         for label, value in STEAMVR_BUTTONS.items():
             self.steamvr_sprint_button_combo.addItem(label, value)
 
+        # --- Calibration & Health section widgets ---
         self.height_spin = QtWidgets.QDoubleSpinBox()
         self.height_spin.setRange(80.0, 230.0)
         self.height_spin.setSingleStep(0.5)
@@ -136,127 +179,460 @@ class MainWindow(QtWidgets.QWidget):
         self.incline_spin = QtWidgets.QDoubleSpinBox()
         self.incline_spin.setRange(0.0, 25.0)
         self.incline_spin.setSingleStep(0.5)
-        self.incline_spin.setSuffix("°")
+        self.incline_spin.setSuffix("\u00b0")
 
         self.curve_editor = CurveEditor()
 
+        # --- Telemetry labels ---
         self.raw_label = QtWidgets.QLabel("Raw: 0")
         self.filtered_label = QtWidgets.QLabel("Filtered: 0")
         self.output_label = QtWidgets.QLabel("Joystick: 0")
         self.movement_label = QtWidgets.QLabel("Movement: x=0.00 y=0.00")
         self.sprint_label = QtWidgets.QLabel("Sprint: OFF")
+        self.sprint_state_label = QtWidgets.QLabel("Sprint: OFF")
+        self.session_state_label = QtWidgets.QLabel("Ready")
+        self.selected_profile_label = QtWidgets.QLabel("Profile: Default")
+        self.duration_label = QtWidgets.QLabel("Duration: 00:00:00")
+        self.sensor_status_label = QtWidgets.QLabel("Sensor: Not Selected")
+        self.joystick_status_label = QtWidgets.QLabel("Virtual Joystick: Idle")
+        self.steamvr_status_label = QtWidgets.QLabel("SteamVR: Idle")
+        self.strava_status_label = QtWidgets.QLabel("Strava: Not Connected")
+        self.last_session_label = QtWidgets.QLabel("No completed session yet")
+        self.total_stats_label = QtWidgets.QLabel("Totals will appear after sessions")
+        self.treadmill_visual = TreadmillWidget()
         self.steps_label = QtWidgets.QLabel("Steps: 0")
         self.speed_label = QtWidgets.QLabel("Speed: 0.00 km/h")
         self.distance_label = QtWidgets.QLabel("Distance: 0 m")
         self.calories_label = QtWidgets.QLabel("Calories: 0 kcal")
         self.met_label = QtWidgets.QLabel("MET: 0.00")
         self.status_label = QtWidgets.QLabel("Stopped")
+        self.clock_label = QtWidgets.QLabel()
+        self.clock_timer = QtCore.QTimer(self)
+        self.session_timer = QtCore.QTimer(self)
 
         self.speed_bar = QtWidgets.QProgressBar()
         self.speed_bar.setRange(0, 100)
+        self.menu_button = QtWidgets.QPushButton("Settings")
+        self.menu_button.setObjectName("menu_button")
 
-        self.start_button = QtWidgets.QPushButton("Start")
-        self.stop_button = QtWidgets.QPushButton("Stop")
+        # --- Action buttons ---
+        self.start_button = QtWidgets.QPushButton("  Start")
+        self.start_button.setObjectName("start_button")
+        self.stop_button = QtWidgets.QPushButton("  Stop")
+        self.stop_button.setObjectName("stop_button")
         self.save_button = QtWidgets.QPushButton("Save")
         self.calibrate_button = QtWidgets.QPushButton("Auto calibrate")
         self.reset_health_button = QtWidgets.QPushButton("Reset health stats")
         self.install_driver_button = QtWidgets.QPushButton("Install SteamVR driver")
+        self.install_driver_button.setObjectName("install_driver_button")
         self.uninstall_driver_button = QtWidgets.QPushButton("Uninstall SteamVR driver")
 
+        # --- Strava widgets ---
         self.strava_client_id_edit = QtWidgets.QLineEdit()
         self.strava_client_secret_edit = QtWidgets.QLineEdit()
         self.strava_client_secret_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.strava_code_edit = QtWidgets.QLineEdit()
         self.strava_authorize_button = QtWidgets.QPushButton("Authorize Strava")
+        self.strava_authorize_button.setObjectName("strava_authorize_button")
         self.strava_exchange_button = QtWidgets.QPushButton("Save Strava code")
         self.strava_upload_button = QtWidgets.QPushButton("Upload last session")
+        self.strava_upload_button.setObjectName("strava_upload_button")
 
         self.build_layout()
         self.connect_signals()
+        self.update_clock()
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(30_000)
+        self.session_timer.timeout.connect(self.update_session_duration)
 
         self.refresh_devices()
         self.refresh_profiles()
         self.load_profile_to_ui()
 
     def build_layout(self):
-        profile_buttons = QtWidgets.QHBoxLayout()
-        profile_buttons.addWidget(self.profile_combo)
-        profile_buttons.addWidget(self.new_profile_button)
-        profile_buttons.addWidget(self.duplicate_profile_button)
-        profile_buttons.addWidget(self.delete_profile_button)
+        self.controller_label.setText("MARATRON")
+        self.controller_label.setObjectName("app_title")
+        self.status_label.setObjectName("status_badge")
+        self.clock_label.setObjectName("top_hint")
+        self.session_state_label.setObjectName("hero_state")
 
-        device_layout = QtWidgets.QHBoxLayout()
-        device_layout.addWidget(self.device_combo)
-        device_layout.addWidget(self.refresh_devices_button)
+        profile_row = QtWidgets.QHBoxLayout()
+        profile_row.setSpacing(12)
+        profile_row.addWidget(self.profile_combo, 1)
+        profile_row.addWidget(self.new_profile_button)
+        profile_row.addWidget(self.duplicate_profile_button)
+        profile_row.addWidget(self.delete_profile_button)
 
-        form = QtWidgets.QFormLayout()
-        form.addRow("", self.controller_label)
-        form.addRow("Output Mode", self.output_mode_combo)
-        form.addRow("Treadmill mouse", device_layout)
-        form.addRow("Profile", profile_buttons)
-        form.addRow("Input axis", self.axis_combo)
-        form.addRow("", self.omnidirectional_check)
-        form.addRow("", self.invert_check)
-        form.addRow("Deadzone", self.deadzone_spin)
-        form.addRow("Smoothing", self.smoothing_spin)
-        form.addRow("Max raw speed", self.max_speed_spin)
-        form.addRow("Poll interval ms", self.poll_spin)
-        form.addRow("", self.auto_sprint_check)
-        form.addRow("Sprint threshold", self.sprint_threshold_spin)
-        form.addRow("UInput sprint button", self.sprint_button_combo)
-        form.addRow("SteamVR sprint button", self.steamvr_sprint_button_combo)
-        form.addRow("Height", self.height_spin)
-        form.addRow("", self.stride_estimate_label)
-        form.addRow("Weight", self.weight_spin)
-        form.addRow("Age", self.age_spin)
-        form.addRow("Gender", self.gender_combo)
-        form.addRow("Mouse DPI preset", self.mouse_dpi_combo)
-        form.addRow("Custom DPI", self.custom_dpi_spin)
-        form.addRow("Sensor polling rate", self.polling_rate_spin)
-        form.addRow("Incline", self.incline_spin)
+        device_row = QtWidgets.QHBoxLayout()
+        device_row.setSpacing(12)
+        device_row.addWidget(self.device_combo, 1)
+        device_row.addWidget(self.refresh_devices_button)
 
-        buttons = QtWidgets.QHBoxLayout()
-        buttons.addWidget(self.start_button)
-        buttons.addWidget(self.stop_button)
-        buttons.addWidget(self.calibrate_button)
-        buttons.addWidget(self.save_button)
+        settings_form = QtWidgets.QFormLayout()
+        settings_form.setSpacing(14)
+        settings_form.addRow("Input axis", self.axis_combo)
+        settings_form.addRow("", self.omnidirectional_check)
+        settings_form.addRow("", self.invert_check)
+        settings_form.addRow("Deadzone", self.deadzone_spin)
+        settings_form.addRow("Smoothing", self.smoothing_spin)
+        settings_form.addRow("Max raw speed", self.max_speed_spin)
+        settings_form.addRow("Poll interval ms", self.poll_spin)
 
-        steamvr_driver_buttons = QtWidgets.QHBoxLayout()
-        steamvr_driver_buttons.addWidget(self.install_driver_button)
-        steamvr_driver_buttons.addWidget(self.uninstall_driver_button)
+        sprint_form = QtWidgets.QFormLayout()
+        sprint_form.setSpacing(14)
+        sprint_form.addRow("", self.auto_sprint_check)
+        sprint_form.addRow("Sprint threshold", self.sprint_threshold_spin)
+        sprint_form.addRow("UInput sprint button", self.sprint_button_combo)
+        sprint_form.addRow("SteamVR sprint button", self.steamvr_sprint_button_combo)
 
+        health_form = QtWidgets.QFormLayout()
+        health_form.setSpacing(14)
+        health_form.addRow("Height", self.height_spin)
+        health_form.addRow("", self.stride_estimate_label)
+        health_form.addRow("Weight", self.weight_spin)
+        health_form.addRow("Age", self.age_spin)
+        health_form.addRow("Gender", self.gender_combo)
+        health_form.addRow("Mouse DPI preset", self.mouse_dpi_combo)
+        health_form.addRow("Custom DPI", self.custom_dpi_spin)
+        health_form.addRow("Sensor polling rate", self.polling_rate_spin)
+        health_form.addRow("Incline", self.incline_spin)
+
+        strava_form = QtWidgets.QFormLayout()
+        strava_form.setSpacing(14)
+        strava_form.addRow("Strava client ID", self.strava_client_id_edit)
+        strava_form.addRow("Strava client secret", self.strava_client_secret_edit)
+        strava_form.addRow("Strava auth code", self.strava_code_edit)
         strava_buttons = QtWidgets.QHBoxLayout()
+        strava_buttons.setSpacing(12)
         strava_buttons.addWidget(self.strava_authorize_button)
         strava_buttons.addWidget(self.strava_exchange_button)
         strava_buttons.addWidget(self.strava_upload_button)
 
-        strava_form = QtWidgets.QFormLayout()
-        strava_form.addRow("Strava client ID", self.strava_client_id_edit)
-        strava_form.addRow("Strava client secret", self.strava_client_secret_edit)
-        strava_form.addRow("Strava auth code", self.strava_code_edit)
+        steamvr_driver_row = QtWidgets.QHBoxLayout()
+        steamvr_driver_row.setSpacing(12)
+        steamvr_driver_row.addWidget(self.install_driver_button)
+        steamvr_driver_row.addWidget(self.uninstall_driver_button)
 
-        layout = QtWidgets.QVBoxLayout()
-        layout.addLayout(form)
-        layout.addWidget(QtWidgets.QLabel("Response curve: left-click/add/drag, right-click/delete point"))
-        layout.addWidget(self.curve_editor)
-        layout.addWidget(self.speed_bar)
-        layout.addWidget(self.raw_label)
-        layout.addWidget(self.filtered_label)
-        layout.addWidget(self.output_label)
-        layout.addWidget(self.movement_label)
-        layout.addWidget(self.sprint_label)
-        layout.addWidget(self.steps_label)
-        layout.addWidget(self.speed_label)
-        layout.addWidget(self.distance_label)
-        layout.addWidget(self.calories_label)
-        layout.addWidget(self.met_label)
-        layout.addWidget(self.reset_health_button)
-        layout.addWidget(self.status_label)
-        layout.addLayout(steamvr_driver_buttons)
-        layout.addLayout(strava_form)
-        layout.addLayout(strava_buttons)
-        layout.addLayout(buttons)
-        self.setLayout(layout)
+        dashboard = self._make_page()
+        dashboard_layout = dashboard.widget().layout()
+        dashboard_layout.setContentsMargins(92, 28, 92, 38)
+        dashboard_layout.setSpacing(18)
+
+        hero_row = QtWidgets.QHBoxLayout()
+        hero_row.setSpacing(22)
+        visual_card = self._card("TREADMILL", "Live speed and output are shown directly in the treadmill visual.")
+        visual_card.setObjectName("dashboard_visual_card")
+        visual_card.layout().addWidget(self.treadmill_visual, 1)
+        hero_row.addWidget(visual_card, 7)
+
+        action_card = self._card("SESSION", "Ready in two seconds: choose profile and start.")
+        action_card.setObjectName("dashboard_action_card")
+        action_card.layout().addWidget(self.session_state_label)
+        action_card.layout().addWidget(self.selected_profile_label)
+        action_card.layout().addSpacing(8)
+        self.start_button.setText("Start Session")
+        self.stop_button.setText("Stop Session")
+        action_card.layout().addWidget(self.start_button)
+        action_card.layout().addWidget(self.stop_button)
+        action_card.layout().addStretch(1)
+        hero_row.addWidget(action_card, 4)
+        dashboard_layout.addLayout(hero_row)
+
+        stat_grid = QtWidgets.QGridLayout()
+        stat_grid.setHorizontalSpacing(14)
+        stat_grid.setVerticalSpacing(14)
+        for index, widget in enumerate([self.speed_label, self.distance_label, self.calories_label, self.duration_label]):
+            stat_grid.addWidget(self._stat_tile(widget), 0, index)
+        dashboard_layout.addLayout(stat_grid)
+
+        status_grid = QtWidgets.QGridLayout()
+        status_grid.setHorizontalSpacing(14)
+        status_grid.setVerticalSpacing(14)
+        for index, widget in enumerate([self.sensor_status_label, self.joystick_status_label, self.steamvr_status_label, self.strava_status_label]):
+            status_grid.addWidget(self._status_tile(widget), index // 2, index % 2)
+        dashboard_layout.addLayout(status_grid)
+        dashboard_layout.addStretch(1)
+
+        calibration = self._make_page()
+        calibration_layout = calibration.widget().layout()
+        calibration_layout.addWidget(self._section_title("Calibrate your treadmill like a console setup wizard"))
+        cal_card = self._card("CALIBRATION", "A guided flow for sensor selection and treadmill tuning.")
+        cal_sensor = QtWidgets.QLabel("Sensor selection lives in Menu → Input Device. Run Auto calibrate when the sensor is ready.")
+        cal_sensor.setObjectName("hint_label")
+        cal_sensor.setWordWrap(True)
+        cal_card.layout().addWidget(cal_sensor)
+        for text in [
+            "1  Select sensor mouse",
+            "2  Walk slowly for 5 seconds",
+            "3  Walk normally for 5 seconds",
+            "4  Run for 5 seconds",
+            "5  Test virtual joystick output",
+            "6  Save calibration",
+        ]:
+            cal_card.layout().addWidget(self._step_label(text))
+        cal_buttons = QtWidgets.QHBoxLayout()
+        cal_buttons.setSpacing(12)
+        cal_buttons.addWidget(self.calibrate_button)
+        cal_buttons.addWidget(self.reset_health_button)
+        cal_card.layout().addLayout(cal_buttons)
+        calibration_layout.addWidget(cal_card)
+        calibration_layout.addStretch(1)
+
+        profiles = self._make_page()
+        profiles_layout = profiles.widget().layout()
+        profiles_layout.addWidget(self._section_title("Choose a game profile"))
+        active_profile_card = self._card("ACTIVE PROFILE", "Profiles hold tuning for different games, surfaces, and walking styles.")
+        active_profile_card.layout().addLayout(profile_row)
+        profiles_layout.addWidget(active_profile_card)
+        game_grid = QtWidgets.QGridLayout()
+        game_grid.setHorizontalSpacing(14)
+        game_grid.setVerticalSpacing(14)
+        for index, name in enumerate(["BoneLab", "Half-Life: Alyx", "Skyrim VR", "Custom"]):
+            game_grid.addWidget(self._profile_tile(name), index // 2, index % 2)
+        profiles_layout.addLayout(game_grid)
+        profiles_layout.addStretch(1)
+
+        stats = self._make_page()
+        stats_layout = stats.widget().layout()
+        stats_layout.addWidget(self._section_title("Workout summary and Strava sync"))
+        last_card = self._card("LAST SESSION", "Completed sessions can be uploaded to Strava.")
+        last_card.layout().addWidget(self.last_session_label)
+        last_card.layout().addWidget(self.total_stats_label)
+        stats_layout.addWidget(last_card)
+        strava_status_card = self._card("STRAVA STATUS", "Authorize once, then upload after each session.")
+        strava_status_card.layout().addWidget(self.strava_status_label)
+        strava_status_card.layout().addLayout(strava_buttons)
+        stats_layout.addWidget(strava_status_card)
+        stats_layout.addStretch(1)
+
+        menu_page = QtWidgets.QWidget()
+        menu_layout = QtWidgets.QHBoxLayout(menu_page)
+        menu_layout.setContentsMargins(0, 10, 0, 0)
+        menu_layout.setSpacing(28)
+        menu_sidebar = QtWidgets.QFrame()
+        menu_sidebar.setObjectName("menu_sidebar")
+        menu_sidebar_layout = QtWidgets.QVBoxLayout(menu_sidebar)
+        menu_sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        menu_sidebar_layout.setSpacing(4)
+        self.menu_list = QtWidgets.QListWidget()
+        self.menu_list.setObjectName("menu_list")
+        menu_entries = [
+            ("⚙", "System"),
+            ("🖱", "Input Device"),
+            ("🎮", "Virtual Joystick"),
+            ("🏃", "Movement"),
+            ("💨", "Sprint"),
+            ("👤", "Body & Sensor"),
+            ("🥽", "SteamVR"),
+            ("📊", "Strava"),
+            ("🔧", "Developer"),
+        ]
+        for icon, label in menu_entries:
+            self.menu_list.addItem(f"{icon}  {label}")
+        self.menu_list.setCurrentRow(0)
+        menu_sidebar_layout.addWidget(self.menu_list)
+        menu_layout.addWidget(menu_sidebar, 2)
+        self.menu_stack = QtWidgets.QStackedWidget()
+        self.menu_stack.setObjectName("menu_stack")
+        menu_layout.addWidget(self.menu_stack, 7)
+
+        def menu_card_page(title, *cards):
+            page = self._make_page()
+            layout = page.widget().layout()
+            layout.setContentsMargins(18, 8, 18, 18)
+            layout.addWidget(self._section_title(title))
+            for card in cards:
+                layout.addWidget(card)
+            layout.addStretch(1)
+            return page
+
+        system_card = self._card("SYSTEM", "General application controls.")
+        system_save = QtWidgets.QPushButton("Save Profile")
+        system_save.clicked.connect(self.save)
+        system_card.layout().addWidget(system_save)
+        input_card = self._card("INPUT DEVICE", "Sensor and output backend selection.")
+        input_form = QtWidgets.QFormLayout()
+        input_form.addRow("Output mode", self.output_mode_combo)
+        input_card.layout().addLayout(input_form)
+        input_card.layout().addLayout(device_row)
+        virtual_card = self._card("VIRTUAL JOYSTICK", "Current backend state and session output.")
+        virtual_card.layout().addWidget(self._status_tile(self.joystick_status_label))
+        movement_card = self._card("MOVEMENT TUNING", "Advanced movement response values.")
+        movement_card.layout().addLayout(settings_form)
+        curve_card = self._card("RESPONSE CURVE", "Fine tune low-speed precision and high-speed ramp-up.")
+        curve_hint = QtWidgets.QLabel("Left-click to add/drag points. Right-click to delete a point.")
+        curve_hint.setObjectName("hint_label")
+        curve_card.layout().addWidget(curve_hint)
+        curve_card.layout().addWidget(self.curve_editor)
+        sprint_card = self._card("SPRINT SETTINGS", "Map high-speed movement to an action.")
+        sprint_card.layout().addLayout(sprint_form)
+        sprint_card.layout().addWidget(self._stat_tile(self.sprint_state_label))
+        body_card = self._card("BODY & SENSOR", "Health estimate inputs and sensor calibration details.")
+        body_card.layout().addLayout(health_form)
+        steamvr_card = self._card("STEAMVR", "Install or remove the native SteamVR driver.")
+        steamvr_card.layout().addLayout(steamvr_driver_row)
+        steamvr_note = QtWidgets.QLabel("Restart SteamVR after changing driver installation state.")
+        steamvr_note.setObjectName("hint_label")
+        steamvr_card.layout().addWidget(steamvr_note)
+        strava_settings_card = self._card("STRAVA", "OAuth credentials and authorization code.")
+        strava_settings_card.layout().addLayout(strava_form)
+        strava_hint = QtWidgets.QLabel("Authorize and upload from the Stats screen after a session.")
+        strava_hint.setObjectName("hint_label")
+        strava_settings_card.layout().addWidget(strava_hint)
+        diagnostics_card = self._card("DEVELOPER DIAGNOSTICS", "Raw values are kept here so the dashboard stays clean.")
+        diag_grid = QtWidgets.QGridLayout()
+        for index, widget in enumerate([self.raw_label, self.filtered_label, self.output_label, self.movement_label, self.steps_label, self.met_label]):
+            diag_grid.addWidget(self._stat_tile(widget), index // 2, index % 2)
+        diagnostics_card.layout().addLayout(diag_grid)
+
+        for page in [
+            menu_card_page("System", system_card),
+            menu_card_page("Input Device", input_card),
+            menu_card_page("Virtual Joystick", virtual_card),
+            menu_card_page("Movement", movement_card, curve_card),
+            menu_card_page("Sprint", sprint_card),
+            menu_card_page("Body & Sensor", body_card),
+            menu_card_page("SteamVR", steamvr_card),
+            menu_card_page("Strava", strava_settings_card),
+            menu_card_page("Developer", diagnostics_card),
+        ]:
+            self.menu_stack.addWidget(page)
+
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setObjectName("main_tabs")
+        self.tabs.setUsesScrollButtons(False)
+        for label, page in [("DASHBOARD", dashboard), ("CALIBRATION", calibration), ("PROFILES", profiles), ("STATS", stats)]:
+            self.tabs.addTab(page, label)
+
+        header = QtWidgets.QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(16)
+        header.addWidget(self.controller_label)
+        header.addStretch(1)
+        globe = QtWidgets.QLabel("◉")
+        globe.setObjectName("top_hint")
+        header.addWidget(globe)
+        header.addWidget(self.clock_label)
+        header.addWidget(self.status_label)
+
+        self.content_stack = QtWidgets.QStackedWidget()
+        self.content_stack.addWidget(self.tabs)
+        self.content_stack.addWidget(menu_page)
+
+        footer = QtWidgets.QHBoxLayout()
+        footer.setSpacing(16)
+        footer.addWidget(self.menu_button)
+        footer.addStretch(1)
+        footer.addWidget(self.save_button)
+
+        shell = QtWidgets.QVBoxLayout()
+        shell.setContentsMargins(44, 14, 44, 18)
+        shell.setSpacing(10)
+        shell.addLayout(header)
+        shell.addWidget(self.content_stack, 1)
+        shell.addLayout(footer)
+        self.setLayout(shell)
+
+        QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Tab"), self, activated=self.next_tab)
+        QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Backtab"), self, activated=self.previous_tab)
+        QtGui.QShortcut(QtGui.QKeySequence("F5"), self, activated=self.refresh_devices)
+        QtGui.QShortcut(QtGui.QKeySequence("Escape"), self, activated=self.close_menu)
+        self.menu_button.clicked.connect(self.open_menu)
+        self.menu_list.currentRowChanged.connect(self.menu_stack.setCurrentIndex)
+
+    def _make_page(self):
+        page_content = QtWidgets.QWidget()
+        page_layout = QtWidgets.QVBoxLayout(page_content)
+        page_layout.setContentsMargins(96, 28, 96, 34)
+        page_layout.setSpacing(22)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll.setWidget(page_content)
+        return scroll
+
+    def _card(self, title, subtitle=None):
+        card = QtWidgets.QFrame()
+        card.setObjectName("command_card")
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(24, 20, 24, 22)
+        layout.setSpacing(14)
+        label = QtWidgets.QLabel(title)
+        label.setObjectName("card_title")
+        layout.addWidget(label)
+        if subtitle:
+            sublabel = QtWidgets.QLabel(subtitle)
+            sublabel.setObjectName("card_subtitle")
+            sublabel.setWordWrap(True)
+            layout.addWidget(sublabel)
+        return card
+
+    def _stat_tile(self, label):
+        tile = QtWidgets.QFrame()
+        tile.setObjectName("stat_tile")
+        layout = QtWidgets.QVBoxLayout(tile)
+        layout.setContentsMargins(18, 14, 18, 14)
+        label.setParent(tile)
+        layout.addWidget(label)
+        return tile
+
+    def _section_title(self, text):
+        label = QtWidgets.QLabel(text)
+        label.setObjectName("section_title")
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        return label
+
+    def _small_caps(self, text):
+        label = QtWidgets.QLabel(text)
+        label.setObjectName("small_caps")
+        return label
+
+    def update_clock(self):
+        self.clock_label.setText(dt.datetime.now().strftime("%-I:%M %p"))
+
+    def next_tab(self):
+        self.tabs.setCurrentIndex((self.tabs.currentIndex() + 1) % self.tabs.count())
+
+    def previous_tab(self):
+        self.tabs.setCurrentIndex((self.tabs.currentIndex() - 1) % self.tabs.count())
+
+    def open_menu(self):
+        self.content_stack.setCurrentIndex(1)
+
+    def close_menu(self):
+        self.content_stack.setCurrentIndex(0)
+
+    def _status_tile(self, label):
+        tile = QtWidgets.QFrame()
+        tile.setObjectName("status_tile")
+        layout = QtWidgets.QVBoxLayout(tile)
+        layout.setContentsMargins(18, 14, 18, 14)
+        label.setParent(tile)
+        layout.addWidget(label)
+        return tile
+
+    def _step_label(self, text):
+        label = QtWidgets.QLabel(text)
+        label.setObjectName("step_label")
+        return label
+
+    def _profile_tile(self, name):
+        tile = QtWidgets.QFrame()
+        tile.setObjectName("profile_tile")
+        layout = QtWidgets.QVBoxLayout(tile)
+        layout.setContentsMargins(22, 18, 22, 18)
+        title = QtWidgets.QLabel(name)
+        title.setObjectName("profile_title")
+        desc = QtWidgets.QLabel("Game profile preset")
+        desc.setObjectName("card_subtitle")
+        active = QtWidgets.QLabel("ACTIVE" if name == self.current_profile_name() else "AVAILABLE")
+        active.setObjectName("small_caps")
+        layout.addWidget(title)
+        layout.addWidget(desc)
+        layout.addStretch(1)
+        layout.addWidget(active)
+        return tile
 
     def connect_signals(self):
         self.refresh_devices_button.clicked.connect(self.refresh_devices)
@@ -332,6 +708,7 @@ class MainWindow(QtWidgets.QWidget):
     def refresh_devices(self):
         selected = self.data.get("selected_device_path", "")
         self.devices = scan_pointer_devices()
+        self.sensor_status_label.setText("Sensor: Connected" if self.devices else "Sensor: Not Found")
 
         self.device_combo.blockSignals(True)
         self.device_combo.clear()
@@ -374,6 +751,8 @@ class MainWindow(QtWidgets.QWidget):
         self.update_axis_controls()
         self.update_stride_estimate()
         self.update_dpi_controls()
+        self.selected_profile_label.setText(f"Profile: {self.data['active_profile']}")
+        self.strava_status_label.setText("Strava: Connected" if self.data.get("strava", {}).get("access_token") else "Strava: Not Connected")
 
     def read_ui_to_profile(self):
         if self.device_combo.currentIndex() >= 0:
@@ -525,6 +904,10 @@ class MainWindow(QtWidgets.QWidget):
 
         self.save()
         self.session_start_time = dt.datetime.now().replace(microsecond=0)
+        self.session_elapsed_seconds = 0
+        self.session_state_label.setText("Session Running")
+        self.joystick_status_label.setText("Virtual Joystick: Active")
+        self.session_timer.start(1000)
         self.last_telemetry = None
         self.last_session = None
         self.worker = TreadmillWorker(make_profile_config(self.data))
@@ -538,6 +921,12 @@ class MainWindow(QtWidgets.QWidget):
             self.worker.stop()
             self.worker.wait(1500)
             self.worker = None
+            self.session_timer.stop()
+            self.session_state_label.setText("Ready")
+            self.treadmill_visual.set_output_percent(0)
+            self.joystick_status_label.setText("Virtual Joystick: Idle")
+            self.treadmill_visual.set_speed(0.0)
+            self.treadmill_visual.set_output_percent(0)
             self._finalize_session()
 
     def auto_calibrate(self):
@@ -657,12 +1046,28 @@ class MainWindow(QtWidgets.QWidget):
         self.output_label.setText(f"Joystick: {data['joy']}")
         self.movement_label.setText(f"Movement: x={data['move_x']:.2f} y={data['move_y']:.2f}")
         self.sprint_label.setText(f"Sprint: {'ON' if data['sprint'] else 'OFF'}")
+        self.sprint_state_label.setText(f"Sprint: {'ON' if data['sprint'] else 'OFF'}")
         self.speed_bar.setValue(int(data["curved"] * 100))
+        self.treadmill_visual.set_output_percent(int(data.get("curved", 0.0) * 100))
+        self.treadmill_visual.set_speed(data.get("speed_kmh", 0.0))
+        self.treadmill_visual.set_output_percent(int(data.get("curved", 0.0) * 100))
         self.steps_label.setText(f"Steps: {data['steps']}")
         self.speed_label.setText(f"Speed: {data.get('speed_kmh', 0.0):.2f} km/h")
         self.distance_label.setText(f"Distance: {data['distance_m']:.1f} m")
         self.calories_label.setText(f"Calories: {data['calories']:.1f} kcal")
         self.met_label.setText(f"MET: {data.get('met', 0.0):.2f}")
+        if data.get("speed_kmh", 0.0) >= 8.0:
+            self.session_state_label.setText("Running")
+        elif data.get("speed_kmh", 0.0) > 0.2:
+            self.session_state_label.setText("Walking")
+
+    def update_session_duration(self):
+        if self.session_start_time is None:
+            return
+        self.session_elapsed_seconds = max(0, int((dt.datetime.now().replace(microsecond=0) - self.session_start_time).total_seconds()))
+        hours, rem = divmod(self.session_elapsed_seconds, 3600)
+        minutes, seconds = divmod(rem, 60)
+        self.duration_label.setText(f"Duration: {hours:02d}:{minutes:02d}:{seconds:02d}")
 
     def _finalize_session(self):
         if self.session_start_time is None or self.last_telemetry is None:
@@ -686,9 +1091,10 @@ class MainWindow(QtWidgets.QWidget):
             "description": "Manual treadmill session recorded by MaratronVR.",
         }
         self.session_start_time = None
-        self.status_label.setText(
-            f"Session ready for Strava: {activity_type}, {distance_m:.1f} m, {average_speed_kmh:.2f} km/h"
-        )
+        summary = f"{activity_type} • {distance_m:.1f} m • {average_speed_kmh:.2f} km/h • {elapsed}s"
+        self.last_session_label.setText(summary)
+        self.total_stats_label.setText(f"Last calories: {self.last_session['calories']:.1f} kcal")
+        self.status_label.setText(f"Session ready for Strava: {activity_type}, {distance_m:.1f} m, {average_speed_kmh:.2f} km/h")
 
     def closeEvent(self, event):
         self.stop()
@@ -705,3 +1111,16 @@ class MainWindow(QtWidgets.QWidget):
         index = combo.findData(value)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+    @staticmethod
+    def run():
+        """Entry point: display the window with the dark theme loaded."""
+        import sys
+        app = QtWidgets.QApplication(sys.argv)
+        style_path = Path(__file__).resolve().parent / "style.qss"
+        if style_path.exists():
+            with open(style_path) as f:
+                app.setStyleSheet(f.read())
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec())
