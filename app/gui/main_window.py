@@ -146,6 +146,14 @@ class MainWindow(QtWidgets.QWidget):
         self.session_timer = QtCore.QTimer(self)
         self.speed_bar = QtWidgets.QProgressBar(); self.speed_bar.setRange(0, 100)
 
+        # Sensitivity slider
+        self.sensitivity_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.sensitivity_slider.setRange(10, 300)  # 0.1 to 3.0 in tenths
+        self.sensitivity_slider.setValue(100)
+        self.sensitivity_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
+        self.sensitivity_slider.setTickInterval(20)
+        self.sensitivity_label = QtWidgets.QLabel("Sensitivity: 1.00x")
+
         # System info
         self.sys_os = QtWidgets.QLabel(platform.system() + " " + platform.release())
         self.sys_arch = QtWidgets.QLabel(platform.machine())
@@ -359,6 +367,16 @@ class MainWindow(QtWidgets.QWidget):
         for i, w in enumerate([self.sensor_status_label, self.joystick_status_label, self.steamvr_status_label, self.strava_status_label]):
             sg2.addWidget(self._stat_tile(w), i // 2, i % 2)
         lay.addLayout(sg2)
+
+        # Sensitivity slider row
+        sens_row = QtWidgets.QHBoxLayout()
+        self.sensitivity_label.setObjectName("sensitivity_label")
+        sens_row.addWidget(self.sensitivity_label)
+        sens_row.addWidget(self.sensitivity_slider, 1)
+        sens_card = self._card("SENSITIVITY", "Adjust how much belt movement maps to joystick output.")
+        sens_card.layout().addLayout(sens_row)
+        lay.addWidget(sens_card)
+
         lay.addStretch(1)
         return sc
 
@@ -425,9 +443,9 @@ class MainWindow(QtWidgets.QWidget):
         # Sidebar + content
         hbox = QtWidgets.QHBoxLayout(); hbox.setSpacing(20)
         sidebar = QtWidgets.QFrame(); sidebar.setObjectName("menu_sidebar")
-        sl = QtWidgets.QVBoxLayout(sidebar); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(2)
+        sl = QtWidgets.QVBoxLayout(sidebar); sl.setContentsMargins(0, 4, 0, 4); sl.setSpacing(0)
         self.menu_list = QtWidgets.QListWidget(); self.menu_list.setObjectName("menu_list")
-        self.menu_list.setIconSize(QtCore.QSize(20, 20))
+        self.menu_list.setIconSize(QtCore.QSize(24, 24))
         entries = [
             ("System", "system"),
             ("Input Device", "input_device"),
@@ -439,7 +457,8 @@ class MainWindow(QtWidgets.QWidget):
             ("Developer", "developer"),
         ]
         for label, icon_name in entries:
-            item = QtWidgets.QListWidgetItem(f"  {label}")
+            item = QtWidgets.QListWidgetItem(label)
+            item.setSizeHint(QtCore.QSize(0, 46))
             icon_path = Path(__file__).resolve().parent.parent.parent / "assets" / "icons" / f"{icon_name}.svg"
             if icon_path.exists():
                 item.setIcon(QtGui.QIcon(str(icon_path)))
@@ -664,6 +683,7 @@ class MainWindow(QtWidgets.QWidget):
         self.omnidirectional_check.stateChanged.connect(self.update_axis_controls)
         self.height_spin.valueChanged.connect(self.update_stride_estimate)
         self.mouse_dpi_combo.currentIndexChanged.connect(self.update_dpi_controls)
+        self.sensitivity_slider.valueChanged.connect(self.update_sensitivity)
 
     def current_profile_name(self):
         return self.profile_combo.currentText() or self.data["active_profile"]
@@ -718,6 +738,9 @@ class MainWindow(QtWidgets.QWidget):
         strava = self.data.get("strava", {})
         self.strava_client_id_edit.setText(strava.get("client_id", ""))
         self.strava_client_secret_edit.setText(strava.get("client_secret", ""))
+        sens = float(profile.get("sensitivity", 1.0))
+        self.sensitivity_slider.setValue(int(sens * 100))
+        self.sensitivity_label.setText(f"Sensitivity: {sens:.2f}x")
         self.update_axis_controls(); self.update_stride_estimate(); self.update_dpi_controls()
         self.selected_profile_label.setText(f"Profile: {self.data['active_profile']}")
         self.strava_status_label.setText("Strava: Connected" if self.data.get("strava", {}).get("access_token") else "Strava: Not Connected")
@@ -741,6 +764,7 @@ class MainWindow(QtWidgets.QWidget):
         profile["poll_interval_ms"] = self.poll_spin.value()
         profile["auto_sprint"] = self.auto_sprint_check.isChecked()
         profile["sprint_threshold"] = self.sprint_threshold_spin.value()
+        profile["sensitivity"] = self.sensitivity_slider.value() / 100.0
         profile["sprint_button"] = self.sprint_button_combo.currentText()
         profile["steamvr_sprint_button"] = self.steamvr_sprint_button_combo.currentData()
         profile["curve_points"] = self.curve_editor.get_points()
@@ -769,6 +793,10 @@ class MainWindow(QtWidgets.QWidget):
     def update_axis_controls(self): self.axis_combo.setEnabled(not self.omnidirectional_check.isChecked())
     def update_stride_estimate(self): self.stride_estimate_label.setText(f"Estimated stride: {self._stride_from_height(self.height_spin.value()):.2f} m")
     def update_dpi_controls(self): self.custom_dpi_spin.setEnabled(self.mouse_dpi_combo.currentData() == CUSTOM_DPI_VALUE)
+    def update_sensitivity(self):
+        val = self.sensitivity_slider.value() / 100.0
+        self.sensitivity_label.setText(f"Sensitivity: {val:.2f}x")
+        self.on_config_changed()
 
     def _current_dpi_value(self):
         v = self.mouse_dpi_combo.currentData()

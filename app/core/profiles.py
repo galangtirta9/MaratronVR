@@ -22,6 +22,7 @@ DEFAULT_PROFILE = {
     "poll_interval_ms": 8,
     "auto_sprint": True,
     "sprint_threshold": 0.92,
+    "sensitivity": 1.0,
     "sprint_button": "BTN_THUMBL / L3",
     "steamvr_sprint_button": "grip",
     "curve_points": [

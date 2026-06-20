@@ -116,6 +116,10 @@ class TreadmillWorker(QtCore.QThread):
             and (abs(move_x) > 0.0 or abs(move_y) > 0.0)
         )
 
+        sensitivity = max(0.1, min(3.0, float(self.config.get("sensitivity", 1.0))))
+        move_x = max(-1.0, min(1.0, move_x * sensitivity))
+        move_y = max(-1.0, min(1.0, move_y * sensitivity))
+
         movement = {
             "move_x": move_x,
             "move_y": move_y,
