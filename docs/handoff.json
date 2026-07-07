@@ -4,34 +4,71 @@
     "github": "https://github.com/galangtirta9/MaratronVR.git",
     "description": "SteamVR native driver + Python GUI for treadmill locomotion using optical mouse sensors",
     "language_stack": {
-      "python": "3.10+ (PyQt6, evdev, stdlib only \u2014 no pip strava client)",
+      "python": "3.10+ (PyQt6, evdev, stdlib only — no pip strava client)",
       "c++": "C++17, OpenVR/SteamVR driver API, cmake build"
     },
-    "last_commit": "a050869 Checkpoint: pre-Windows port snapshot",
-    "date": "2026-06-19",
-    "last_updated": "2026-06-19T13:32:00+07:00",
-    "last_ui_handoff": "Steam-like keyboard-only header redesign and polish"
+    "last_commit": "274f541 Checkpoint: architecture refactor complete",
+    "date": "2026-07-08",
+    "last_updated": "2026-07-08T01:11:00+07:00",
+    "last_ui_handoff": "Full architectural refactor: 7-phase modularization per AGENTS.md rules"
   },
   "architecture": {
-    "overview": "A Python application reads raw mouse movement from a treadmill-mounted optical mouse via evdev. The movement data is smoothed, curved, and sent to one of two output backends: a Linux uinput gamepad (for non-VR games), or a UDP socket to a native C++ SteamVR driver (for VR games). Health metrics (distance, speed, calories) are computed from DPI-based distance and MET formulas, with optional Strava upload."
+    "overview": "A Python application reads raw mouse movement from a treadmill-mounted optical mouse via evdev. The movement data is smoothed, curved, and sent to one of two output backends: a Linux uinput gamepad (for non-VR games), or a UDP socket to a native C++ SteamVR driver (for VR games). Health metrics (distance, speed, calories) are computed from DPI-based distance and MET formulas, with optional Strava upload.",
+    "layers": {
+      "gui": "Pages and widgets — display data and emit signals only. No business logic.",
+      "controllers": "Coordinate workflows — no calculations. Injected with dependencies.",
+      "services": "Pure business logic — movement math, session lifecycle. Testable without Qt.",
+      "repositories": "JSON I/O layer — ready for extraction from profiles.py.",
+      "models": "Dataclasses — Session model with from_dict/to_dict.",
+      "drivers": "Backends (uinput, SteamVR UDP, HIDMaestro) + C++ SteamVR driver."
+    },
+    "dependency_rule": "Dependencies point downward only. GUI → Controllers → Services → Repositories → Drivers. No circular imports. No UI imports in business logic. No business logic in QThreads."
   },
   "project_structure": {
+    "app/bootstrap.py": "Composition root. Constructs all objects with dependency injection. MainWindow receives already-constructed controllers and services. All wiring happens here. Follows AGENTS.md: construction belongs in one place.",
+    "app/main.py": "Entry point. Calls build_app() from bootstrap, loads QSS stylesheet, runs Qt event loop.",
+    "app/__main__.py": "python -m app entry. Calls main().",
+
+    "app/controllers/navigation_controller.py": "Tab switching logic (77 lines). Handles Dashboard/Calibration/Profiles/Stats tab cycling, settings overlay toggle, keyboard shortcuts (Q/E, left/right, 1-4, Escape, Backspace, Ctrl), Ctrl-key press detection.",
+    "app/controllers/profile_controller.py": "Profile CRUD and UI sync (303 lines). Loads/saves profiles to JSON, syncs widget state to profile dict and vice versa, creates/deletes/duplicates profiles, manages DPI preset and stride helpers, emits toasts on profile switch.",
+
+    "app/services/movement_processor.py": "Pure movement math (85 lines). Extracted from TreadmillWorker. Processes raw mouse motion into joystick output via smoothing, deadzone, curve application, sprint detection, sensitivity scaling. Testable without Qt, evdev, or threading.",
+    "app/services/session_service.py": "Session lifecycle coordinator (46 lines). Builds session records from timing/telemetry data, detects walk vs run activity type, computes average speed. Testable without Qt.",
+
+    "app/models/session.py": "Session dataclass with from_dict/to_dict serialization plus build_session_from_telemetry() pure factory function.",
+
+    "app/repositories/__init__.py": "Repository directory — ready for JSON I/O extraction from app/core/profiles.py.",
+
+    "app/core/constants.py": "All magic numbers extracted from across the codebase: stride multiplier, speed thresholds, network ports, DPI presets, CUSTOM_DPI_VALUE, calibration defaults, session/clock timer intervals, thread timeout, sensitivity slider range.",
+    "app/core/logging.py": "Logging service. get_logger() returns a configured logger (DEBUG to stderr). Replaces scattered print() calls per AGENTS.md rules.",
+
+    "app/gui/pages/dashboard_page.py": "Dashboard tab (159 lines). Treadmill visual, session controls (Start/Stop), live telemetry readouts (speed, distance, calories, duration), status cards (sensor, joystick, SteamVR, Strava), sensitivity slider.",
+    "app/gui/pages/calibration_page.py": "Calibration tab (76 lines). Auto calibrate button, reset health button, live noise/max noise/samples readout.",
+    "app/gui/pages/profiles_page.py": "Profiles tab (76 lines). Profile combo selector, New/Dup/Del buttons, profile tile grid, empty state.",
+    "app/gui/pages/stats_page.py": "Stats tab (143 lines). Session history chart, total stats cards, session list rows, Strava upload/authorize buttons, empty state.",
+    "app/gui/pages/settings_page.py": "Settings overlay (394 lines). Sidebar menu + stacked sub-pages: System, Input Device, Movement, Sprint, Body & Sensor, SteamVR, Strava, Developer Diagnostics. Save button wired via bootstrap injection.",
+
+    "app/gui/main_window.py": "Main window shell and widget factory (1024 lines, down from 1295). Creates all shared widgets, builds header/footer shell, delegates page construction to page classes, wires signals. Receives controllers via dependency injection from bootstrap.",
+
     "app/backends/base.py": "Abstract MovementBackend class. Defines start(), send_movement(), stop().",
     "app/backends/uinput_backend.py": "UInput gamepad backend. Creates a /dev/uinput virtual Xbox-style gamepad with ABS_X/Y for joystick, EV_KEY for sprint button mapping.",
     "app/backends/steamvr_client.py": "Python UDP sender. Sends JSON {'move_x', 'move_y', 'sprint', 'speed'} to 127.0.0.1:9001 for the C++ SteamVR driver.",
     "app/backends/factory.py": "Backend factory. create_backend('uinput') returns UInputBackend, create_backend('steamvr') returns SteamVRClient.",
+    "app/backends/hidmaestro_backend.py": "Stub HIDMaestro backend for future Windows port.",
     "app/core/calibration.py": "Auto-calibration: reads raw mouse events for 4 seconds, computes deadzone and max_raw_speed from statistical distribution. Emits noise samples for live GUI readout.",
     "app/core/curve.py": "Response curve logic. Takes normalized input (0.0-1.0) through editable spline points and applies the curve. Supports multi-point editing.",
     "app/core/device_scan.py": "Scans /dev/input/* for pointer devices using evdev, returns list of {label, path} for the GUI dropdown.",
     "app/core/health.py": "HealthTracker class. Computes distance from mouse DPI + raw counts + configurable distance_calibration multiplier, speed in km/h from dt, MET-based calories with incline/friction multiplier, steps from height-derived stride length. Incline can be degrees (tan conversion) or legacy percentage grade.",
     "app/core/profiles.py": "Profile persistence and default values. Stores all config (axis, invert, deadzone, health, strava tokens, distance_calibration, incline_degrees) in app/profiles.json.",
-    "app/core/treadmill_reader.py": "TreadmillWorker QThread. Reads mouse events in a loop, applies deadzone/smoothing/curve, sends processed movement to backend via send_movement(), emits telemetry signals to GUI.",
+    "app/core/treadmill_reader.py": "TreadmillWorker QThread (121 lines, down from 182). Reads mouse events in a loop, delegates movement math to MovementProcessor, sends processed movement to backend via send_movement(), emits telemetry signals to GUI. Pure threading — no business logic.",
     "app/core/driver_install.py": "SteamVR driver install/uninstall helper. Runs cmake configure/build/install, or removes drivers/maratron/.",
     "app/core/strava_client.py": "Strava OAuth2 + activity upload client. Pure stdlib: no external deps. Handles auth URL, code exchange, token refresh, activity POST.",
-    "app/gui/main_window.py": "Main PyQt6 window with Steam Input-inspired keyboard-only header. Header top row shows Profile: {current profile} on the left, a centered active/inactive status dot, and time + rectangular profile avatar on the right. Second row has Q/E keycaps pinned to far left/right with centered uppercase nav pills (Dashboard, Calibration, Profiles, Stats). Q/E cycle tabs; left/right and 1-4 remain convenience shortcuts. Footer keeps Settings/Save; settings opens as 5th stacked page with sidebar nav.",
     "app/gui/curve_widget.py": "Interactive curve editor widget (QPainter-based). Left-click to add point, drag to move, right-click to delete.",
     "app/gui/style.qss": "Steam Big Picture/Input-inspired Qt stylesheet. Dark palette, keyboard-only header, Q/E keycaps, centered nav_pill tabs, minimal active/inactive status dot using Steam-adjacent blue/slate colors, rectangular profile avatar with integrated blue right border, footer pills, command cards, stat tiles, menu sidebar, scrollbar.",
     "app/gui/treadmill_widget.py": "Code-drawn animated treadmill visual using QPainter and QTimer. Draws a dark treadmill deck with moving belt stripes whose animation speed follows live telemetry speed.",
+    "app/gui/toast.py": "Toast notification widget for transient messages (e.g., 'Switched to Alyx').",
+    "app/gui/confirm_modal.py": "Confirmation modal for destructive actions.",
+    "app/gui/stats_chart_widget.py": "Session history chart widget with metric toggle (distance/calories/speed).",
     "backends/native-steamvr/": "Native C++ SteamVR driver source. Builds to driver_maratron.so.",
     "backends/native-steamvr/driver_main.cpp": "HmdDriverFactory entry point. Returns MaratronServer and WatchdogServer.",
     "backends/native-steamvr/maratron_server.cpp/h": "Server provider. Creates UDP receiver on port 9001, registers MaratronDevice with SteamVR.",
@@ -46,7 +83,7 @@
   "confirmed_working": [
     "UInput gamepad backend works in flat games (joystick movement + sprint button)",
     "SteamVR native driver appears as separate device (maratron_treadmill, TrackedControllerRole_Treadmill)",
-    "SteamVR UDP pipeline: Python \u2192 UDP port 9001 \u2192 C++ RunFrame \u2192 SteamVR input",
+    "SteamVR UDP pipeline: Python → UDP port 9001 → C++ RunFrame → SteamVR input",
     "Joystick_left X and Y axes detected in SteamVR test controller UI",
     "Grip click detected in SteamVR test controller UI",
     "In-game locomotion confirmed working with variable speed",
@@ -58,7 +95,7 @@
     "Mouse DPI-based distance calculation with configurable distance_calibration multiplier",
     "MET-based calorie calculation with incline, weight, friction, speed",
     "Session elapsed time tracking from Start to Stop",
-    "Automatic Strava activity type detection (Walk < 8 km/h, Run \u2265 8 km/h)",
+    "Automatic Strava activity type detection (Walk < 8 km/h, Run ≥ 8 km/h)",
     "Strava client code exchange and token refresh",
     "Pill tab navigation (Dashboard/Calibration/Profiles/Stats) centered with active/inactive styling",
     "Settings page with sidebar nav: System info (OS/CPU/RAM/Python), Input Device, Movement, Sprint, Body & Sensor, SteamVR, Strava, Developer Diagnostics",
@@ -72,7 +109,14 @@
     "Header contains placeholder profile avatar intended for future Strava profile image integration",
     "Header active/inactive session status is represented as a minimal colored dot and updates on Start/Stop",
     "Q/E shortcuts cycle tabs; left/right arrows and 1-4 direct tab shortcuts remain available",
-    "Header clock and profile typography aligned with dashboard style and bolded per user preference"
+    "Header clock and profile typography aligned with dashboard style and bolded per user preference",
+    "App launches clean after full architectural refactor with dependency injection (build_app → bootstrap → MainWindow + controllers)",
+    "MovementProcessor extracted from TreadmillWorker — pure math, testable without Qt/evdev/threading",
+    "SessionService handles session finalization — testable without Qt",
+    "All magic numbers extracted to app/core/constants.py",
+    "Logging service (app/core/logging.py) replaces print() calls",
+    "Session dataclass in app/models/session.py with from_dict/to_dict",
+    "Silent exceptions replaced with _log.exception() calls"
   ],
   "known_limitations": [
     "SteamVR device always appears in device list once driver is installed (cannot hide at runtime)",
@@ -93,7 +137,7 @@
     "Header profile avatar is still a local placeholder initial; Strava athlete profile picture fetch/storage is not implemented yet",
     "Header typography is close to the Steam reference but may need further font-family tuning if exact Steam visual matching is required",
     "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated. Windows port requires a new Python backend (hidmaestro_backend.py) and a C# bridge process.",
-    "HIDMaestro (core/HIDMaestro/) cloned but not yet integrated."
+    "Repositories directory exists but JSON I/O still in app/core/profiles.py — not yet extracted"
   ],
   "hardware_baseline": {
     "sensor_type": "Optical mouse (USB), accessed via evdev /dev/input/event*",
@@ -107,76 +151,76 @@
       "priority": 0,
       "area": "Windows Port (HIDMaestro)",
       "task": "Create MaratronBridge.exe C# project + Python hidmaestro_backend.py",
-      "notes": "Python -> UDP/9003 -> C# -> HIDMaestro SDK. HMOemNameOverride.Set() for name."
-    },
-    {
-      "priority": 0,
-      "area": "Windows Port (HIDMaestro)",
-      "task": "Create MaratronBridge.exe C# project + Python hidmaestro_backend.py",
       "notes": "Architecture: Python -> UDP/9003 -> C# bridge -> HIDMaestro SDK -> Windows virtual gamepad. HMOemNameOverride.Set() for controller name. HMGamepadState.Axes for movement. HMGamepadState.Buttons for sprint."
     },
     {
       "priority": 1,
+      "area": "Repositories",
+      "task": "Extract JSON I/O from app/core/profiles.py into app/repositories/profile_repository.py and app/repositories/session_repository.py",
+      "notes": "Repositories directory created but profiles.py still does direct JSON reads/writes."
+    },
+    {
+      "priority": 2,
       "area": "GUI Theming / Redesign",
       "task": "Complete Figma-based design for the final UI vision",
       "notes": "Current layout is functional but amateur spacing/padding. User wants to design in Figma first before further implementation."
     },
     {
-      "priority": 2,
+      "priority": 3,
       "area": "Calibration Flow",
-      "task": "Implement true multi-stage calibration (noise floor \u2192 slow walk \u2192 normal walk \u2192 run)",
+      "task": "Implement true multi-stage calibration (noise floor → slow walk → normal walk → run)",
       "notes": "Current worker only measures noise floor for 4 seconds. Needs walk/run stages, progress feedback, joystick output test."
     },
     {
-      "priority": 3,
+      "priority": 4,
       "area": "Strava Upload Feedback",
       "task": "Show loading indicator or background thread during upload",
       "notes": "Upload_activity blocks for ~20s. Move to QThread or use QProgressDialog."
     },
     {
-      "priority": 4,
+      "priority": 5,
       "area": "SteamVR Icon",
       "task": "Create proper PNG icon variants (32x32 RGBA)",
       "notes": "icon_ready.png (green), icon_ready_night.png, icon_searching.png (yellow), icon_searching_night.png, icon_alert.png (red). Paths set in maratron_device.cpp Activate()."
     },
     {
-      "priority": 5,
+      "priority": 6,
       "area": "Render Model",
       "task": "Replace vr_controller_vive_1_5 with simple custom render model or hide device",
       "notes": "Prop_RenderModelName_String value determines what 3D model appears in SteamVR."
     },
     {
-      "priority": 6,
+      "priority": 7,
       "area": "Profile Cards UX",
       "task": "Make game profile cards actionable",
       "notes": "Cards should select/create/load profiles directly, show active status, support game icons."
     },
     {
-      "priority": 7,
+      "priority": 8,
       "area": "Legacy Bindings Cleanup",
       "task": "Rename legacydb_bindings_vive_controller.json to legacydb_bindings_maratron.json",
       "notes": "Update CMakeLists.txt install rule and driver.vrdrivermanifest if needed."
     },
     {
-      "priority": 8,
+      "priority": 9,
       "area": "Watchdog Cleanup",
       "task": "Remove watchdog.cpp/.h and its entry in driver_main.cpp if no-op is acceptable",
       "notes": "Some SteamVR versions may require a working watchdog for driver stability."
     },
     {
-      "priority": 9,
+      "priority": 10,
       "area": "Strava UX Polish",
       "task": "Add popup/tooltip explanations for health fields, auto-detect threshold",
-      "notes": "Height explains stride derivation, incline explains degree\u2192MET conversion."
+      "notes": "Height explains stride derivation, incline explains degree→MET conversion."
     },
     {
-      "priority": 10,
+      "priority": 11,
       "area": "Connection Health UX",
       "task": "Back status cards with real health checks",
       "notes": "Sensor, virtual joystick, SteamVR, and Strava cards should reflect live backend state."
     },
     {
-      "priority": 11,
+      "priority": 12,
       "area": "Strava Profile UX",
       "task": "Fetch and display Strava athlete profile picture in the header avatar",
       "notes": "Header now has a placeholder rectangular avatar with profile initial and Steam-blue right border. Later, use Strava athlete/profile endpoint after OAuth, cache the image locally, and render it in the existing avatar slot."
@@ -192,10 +236,73 @@
     ],
     "pip_deps": "pip install PyQt6 evdev",
     "native_driver_build": "cd backends/native-steamvr && cmake -B build && cmake --build build && cmake --install build --prefix ~/.local/share/Steam/steamapps/common/SteamVR",
-    "or_via_gui": "Open Maratron app \u2192 click Install SteamVR Driver button",
+    "or_via_gui": "Open Maratron app → click Install SteamVR Driver button",
     "run": "python -m app from project root"
   },
   "change_log": [
+    {
+      "date": "2026-07-08",
+      "area": "Full Architectural Refactor — 7-Phase Modularization",
+      "summary": "Decomposed the 1295-line MainWindow god class and 182-line TreadmillWorker into 21 new files across controllers, services, models, repositories, pages, and bootstrap layers. All business logic extracted from Qt widgets. Dependency injection via composition root. AGENTS.md rules enforced: no silent exceptions, no magic numbers, logging service, downward-only dependencies.",
+      "files_changed": [
+        "app/bootstrap.py (NEW — 83 lines)",
+        "app/controllers/navigation_controller.py (NEW — 77 lines)",
+        "app/controllers/profile_controller.py (NEW — 303 lines)",
+        "app/services/movement_processor.py (NEW — 85 lines)",
+        "app/services/session_service.py (NEW — 46 lines)",
+        "app/models/session.py (NEW — 51 lines)",
+        "app/models/__init__.py (NEW)",
+        "app/repositories/__init__.py (NEW)",
+        "app/core/constants.py (NEW — 33 lines)",
+        "app/core/logging.py (NEW — 18 lines)",
+        "app/gui/pages/dashboard_page.py (NEW — 159 lines)",
+        "app/gui/pages/calibration_page.py (NEW — 76 lines)",
+        "app/gui/pages/profiles_page.py (NEW — 76 lines)",
+        "app/gui/pages/stats_page.py (NEW — 143 lines)",
+        "app/gui/pages/settings_page.py (NEW — 394 lines)",
+        "app/gui/pages/__init__.py (NEW)",
+        "app/services/__init__.py (NEW)",
+        "app/controllers/__init__.py (NEW)",
+        "app/gui/main_window.py (1295→1024 lines, -271)",
+        "app/core/treadmill_reader.py (182→121 lines, -61)",
+        "app/main.py (17→23 lines, uses build_app())",
+        "docs/handoff.json (this file)"
+      ],
+      "details": [
+        "Phase 1: Extracted 5 UI pages from MainWindow — DashboardPage, CalibrationPage, ProfilesPage, StatsPage, SettingsPage.",
+        "Phase 2: Extracted NavigationController (tab switching, keyboard shortcuts) and ProfileController (profile CRUD, UI sync, DPI/stride helpers) with dependency injection via callbacks.",
+        "Phase 3: Extracted MovementProcessor (pure motion math from TreadmillWorker — now testable without Qt/evdev/threading) and SessionService (session finalization logic).",
+        "Phase 4: Created app/repositories/ directory — ready for JSON I/O extraction from profiles.py.",
+        "Phase 5: Created Session dataclass in app/models/ with from_dict/to_dict + build_session_from_telemetry() factory.",
+        "Phase 6: Fixed violations — extracted all magic numbers to constants.py, added logging service, replaced silent except: pass with _log.exception(), removed unused imports, eliminated duplicate method definitions.",
+        "Phase 7: Created bootstrap.py composition root — all objects constructed with dependency injection, controllers + pages wired after construction, signal wiring deferred to post-injection.",
+        "Bug fixes: CUSTOM_DPI_VALUE missing from constants, save_callback NoneType crash, SettingsPage sys_save_button None connect, _wire_signals/_finalize_init called before controller injection.",
+        "Removed duplicate refresh_devices definitions (2 copies in original file).",
+        "Removed 13 methods from MainWindow delegated to ProfileController.",
+        "Removed 6 unused imports (copy, DEFAULT_PROFILE, ConfirmModal, _set_combo_data, DPI/stride helpers).",
+        "App launches clean: python -m app runs without errors or warnings."
+      ],
+      "design_decisions": [
+        "Only phases strictly outlined in AGENTS.md were executed — no feature creep, no style changes.",
+        "bootstrap.py calls _wire_signals() and _finalize_init() after injection rather than in __init__ to avoid NoneType crashes on self.profile_ctrl.",
+        "save_callback for SettingsPage starts as None and is wired by bootstrap after ProfileController construction.",
+        "TreadmillWorker delegates all math to MovementProcessor — QThread only handles evdev I/O and signal emission.",
+        "SessionService.finalize() returns (session_dict, summary, strava_summary) as a 3-tuple or None for guard clause compatibility.",
+        "hasattr(self, 'profile_ctrl') guard was broken (returns True for None) — replaced with save_callback=None + post-injection wiring."
+      ],
+      "validation": [
+        "python -m py_compile on all 21 new files plus modified files — all pass clean.",
+        "python -m app launches the GUI with no tracebacks, no AttributeErrors, no ImportErrors.",
+        "Full import chain verified: __main__ → main → build_app → MainWindow → all pages, controllers, services, models."
+      ],
+      "follow_up": [
+        "Extract JSON I/O from profiles.py into app/repositories/profile_repository.py and session_repository.py.",
+        "Add unit tests for MovementProcessor.process() — pure math, no Qt deps needed.",
+        "Add unit tests for SessionService.finalize() — pure logic.",
+        "Add unit tests for build_session_from_telemetry() — pure dataclass factory.",
+        "Consider extracting SettingsPage into smaller sub-page classes (each _build_*_page could be its own file)."
+      ]
+    },
     {
       "date": "2026-06-19",
       "area": "GUI Header / Steam-like Keyboard Navigation",

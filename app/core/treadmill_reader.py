@@ -5,8 +5,8 @@ from evdev import InputDevice, ecodes as e
 from PyQt6 import QtCore
 
 from app.backends.factory import create_backend
-from app.core.curve import apply_curve, normalize_curve_points
 from app.core.health import HealthTracker
+from app.services.movement_processor import MovementProcessor
 
 AXIS_MAP = {
     "REL_X": e.REL_X,
@@ -15,6 +15,12 @@ AXIS_MAP = {
 
 
 class TreadmillWorker(QtCore.QThread):
+    """QThread that reads treadmill mouse events and emits telemetry.
+
+    Business logic (movement math) is delegated to MovementProcessor
+    so it can be tested without evdev, Qt, or threading.
+    """
+
     telemetry = QtCore.pyqtSignal(dict)
     status = QtCore.pyqtSignal(str)
     failed = QtCore.pyqtSignal(str)
@@ -25,13 +31,12 @@ class TreadmillWorker(QtCore.QThread):
         self.running = False
         self.mouse = None
         self.backend = None
-        self.filtered = 0.0
-        self.filtered_x = 0.0
-        self.filtered_y = 0.0
         self.health = HealthTracker()
+        self.processor = MovementProcessor(config)
 
     def update_config(self, config):
         self.config = dict(config)
+        self.processor.update_config(config)
         if self.backend is not None:
             self.backend.config = dict(config)
 
@@ -55,7 +60,7 @@ class TreadmillWorker(QtCore.QThread):
 
             while self.running:
                 raw_x, raw_y = self._read_raw_motion()
-                movement, telemetry = self._process_motion(raw_x, raw_y)
+                movement, telemetry = self.processor.process(raw_x, raw_y, self.health)
 
                 self.backend.send_movement(movement)
                 self.telemetry.emit(telemetry)
@@ -88,72 +93,6 @@ class TreadmillWorker(QtCore.QThread):
         raw_x = 0 if abs(raw_x) <= deadzone else raw_x
         raw_y = 0 if abs(raw_y) <= deadzone else raw_y
         return raw_x, raw_y
-
-    def _process_motion(self, raw_x, raw_y):
-        smoothing = max(0.01, min(1.0, float(self.config.get("smoothing", 0.25))))
-        self.filtered_x = (self.filtered_x * (1.0 - smoothing)) + (raw_x * smoothing)
-        self.filtered_y = (self.filtered_y * (1.0 - smoothing)) + (raw_y * smoothing)
-        self.filtered = self.filtered_y
-
-        max_raw_speed = max(1.0, float(self.config.get("max_raw_speed", 20.0)))
-        points = normalize_curve_points(self.config.get("curve_points", []))
-
-        move_x, normalized_x, curved_x = self._process_axis(self.filtered_x, max_raw_speed, points, invert=False)
-        move_y, normalized_y, curved_y = self._process_axis(
-            self.filtered_y,
-            max_raw_speed,
-            points,
-            invert=bool(self.config.get("invert", True)),
-        )
-
-        normalized = max(normalized_x, normalized_y)
-        curved = max(curved_x, curved_y)
-
-        sprint_threshold = float(self.config.get("sprint_threshold", 0.92))
-        sprint_active = (
-            bool(self.config.get("auto_sprint", True))
-            and curved >= sprint_threshold
-            and (abs(move_x) > 0.0 or abs(move_y) > 0.0)
-        )
-
-        sensitivity = max(0.1, min(3.0, float(self.config.get("sensitivity", 1.0))))
-        move_x = max(-1.0, min(1.0, move_x * sensitivity))
-        move_y = max(-1.0, min(1.0, move_y * sensitivity))
-
-        movement = {
-            "move_x": move_x,
-            "move_y": move_y,
-            "sprint": sprint_active,
-            "speed": curved,
-        }
-        health = self.health.update(normalized, self.config, raw_x=raw_x, raw_y=raw_y)
-
-        telemetry = {
-            "raw": raw_y,
-            "raw_x": raw_x,
-            "raw_y": raw_y,
-            "filtered": self.filtered,
-            "filtered_x": self.filtered_x,
-            "filtered_y": self.filtered_y,
-            "normalized": normalized,
-            "curved": curved,
-            "joy": int(move_y * 32767),
-            "move_x": movement["move_x"],
-            "move_y": movement["move_y"],
-            "sprint": sprint_active,
-            **health,
-        }
-        return movement, telemetry
-
-    @staticmethod
-    def _process_axis(filtered, max_raw_speed, points, invert=False):
-        normalized = min(1.0, abs(filtered) / max_raw_speed)
-        curved = apply_curve(normalized, points)
-        sign = -1 if filtered < 0 else 1
-        move = curved * sign
-        if invert:
-            move = -move
-        return max(-1.0, min(1.0, move)), normalized, curved
 
     def _shutdown(self):
         try:

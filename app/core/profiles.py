@@ -52,6 +52,7 @@ DEFAULT_DATA = {
     "profiles": {"Alyx": copy.deepcopy(DEFAULT_PROFILE)},
     "selected_device_path": "",
     "output_mode": OUTPUT_UINPUT,
+    "sessions": [],
     "steamvr": {"host": "127.0.0.1", "port": 9001},
     "strava": {
         "client_id": "",
@@ -93,6 +94,7 @@ def normalize_data(data):
 
     data.setdefault("selected_device_path", "")
     data.setdefault("output_mode", OUTPUT_UINPUT)
+    data.setdefault("sessions", [])
     data.setdefault("steamvr", {})
     data["steamvr"].setdefault("host", "127.0.0.1")
     data["steamvr"].setdefault("port", 9001)

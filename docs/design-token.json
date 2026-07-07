@@ -1,0 +1,272 @@
+{
+  "$schema": "maratronvr-design-tokens-v1",
+  "meta": {
+    "project": "MaratronVR",
+    "consumedBy": "app/gui/style.qss",
+    "note": "Qt Style Sheets have no native CSS custom properties, so style.qss cannot @import this file directly. Treat this JSON as the single source of truth and either (a) generate style.qss from it via a small Python templater (e.g. app/gui/build_qss.py reading this file + a .qss.template), or (b) manually keep style.qss's literal hex values in sync with this file whenever it changes. Do not let style.qss drift from these values.",
+    "referenceModel": "Steam Input / Big Picture, keyboard-only variant",
+    "lastSyncedWithHandoff": "a050869 / 2026-06-19"
+  },
+  "color": {
+    "bg": {
+      "app": "#0A0E14",
+      "panel": "#0F141C",
+      "panelRaised": "#161C26",
+      "input": "#1A212C"
+    },
+    "border": {
+      "subtle": "#232B38",
+      "focus": "#3B82F6"
+    },
+    "text": {
+      "primary": "#F2F4F8",
+      "secondary": "#9AA4B2",
+      "tertiary": "#5C6675",
+      "link": "#5B9CF6",
+      "onFilledAction": "#FFFFFF"
+    },
+    "sessionStatus": {
+      "active": "#3B82F6",
+      "inactive": "#5C6675",
+      "_note": "Blue/slate pair for the header dot only — do NOT reuse action.positive/destructive here, this was an explicit design decision to differentiate session state from session actions"
+    },
+    "connectionStatus": {
+      "connected": "#4C8C5B",
+      "idle": "#5C6675",
+      "warning": "#C99B3E",
+      "error": "#B0453F",
+      "_note": "For Sensor/Joystick/SteamVR/Strava health cards (pending_tasks_priority[10]) — separate palette from sessionStatus"
+    },
+    "action": {
+      "positive": { "fill": "#4C8C5B", "border": "#3E7249" },
+      "destructive": { "fill": "#9C4A4A", "border": "#7E3A3A" },
+      "neutral": { "fill": "#1A212C", "border": "#232B38" }
+    }
+  },
+  "typography": {
+    "fontFamily": "-apple-system, 'Segoe UI', 'Noto Sans', sans-serif",
+    "_note": "Placeholder stack pending the 'exact Steam font matching' follow-up task",
+    "scale": {
+      "headerProfileTitle": { "size": 16, "weight": 700 },
+      "headerClock": { "size": 16, "weight": 700 },
+      "navPill": { "size": 13, "weight": 600, "letterSpacing": 0.02, "case": "uppercase" },
+      "keycap": { "size": 12, "weight": 700 },
+      "sectionHeader": { "size": 12, "weight": 600, "case": "uppercase" },
+      "cardTitle": { "size": 15, "weight": 600 },
+      "body": { "size": 14, "weight": 400 },
+      "primaryMetric": { "size": 36, "weight": 700 },
+      "statTileLabel": { "size": 13, "weight": 500 },
+      "footerPill": { "size": 12, "weight": 600 },
+      "toastLabel": { "size": 13, "weight": 500 },
+      "modalTitle": { "size": 18, "weight": 700 },
+      "emptyStateTitle": { "size": 16, "weight": 600 },
+      "emptyStateBody": { "size": 14, "weight": 400 },
+      "chartLabel": { "size": 11, "weight": 500 }
+    }
+  },
+  "spacing": {
+    "unit": 4,
+    "scale": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "2xl": 32 },
+    "layout": {
+      "headerRowHeight": 40,
+      "footerHeight": 48,
+      "sidebarWidth": 260,
+      "contentPadding": 24,
+      "cardGutter": 16,
+      "modalPadding": 32,
+      "toastPadding": 16
+    }
+  },
+  "radius": {
+    "card": 8,
+    "button": 6,
+    "pill": 999,
+    "input": 6,
+    "avatar": 4,
+    "toast": 8,
+    "modal": 8
+  },
+  "borderWidth": {
+    "default": 1,
+    "focus": 2,
+    "sidebarActiveIndicator": 3,
+    "avatarAccent": 3
+  },
+  "elevation": {
+    "shadow": "none",
+    "note": "QGraphicsDropShadowEffect intentionally unused — flat-fill depth model per Steam reference, and avoids per-widget compositing cost"
+  },
+  "motion": {
+    "sessionDotTransition": { "durationMs": 120, "property": "background-color" },
+    "buttonPress": { "durationMs": 80, "scale": 0.97 },
+    "metricUpdate": { "durationMs": 0, "note": "instant, no QPropertyAnimation on live speed/distance values" },
+    "toastFadeIn": { "durationMs": 150, "property": "opacity" },
+    "toastFadeOut": { "durationMs": 120, "property": "opacity" },
+    "modalEnter": { "durationMs": 120, "property": "opacity" }
+  },
+  "component": {
+    "navPillBar": {
+      "status": "not yet a dedicated widget — currently QPushButton checkable group per known_limitations",
+      "targetWidgetName": "NavPillBar",
+      "height": 32,
+      "activeFill": "border.focus @ 16% opacity",
+      "activeText": "text.link",
+      "inactiveText": "text.secondary"
+    },
+    "keycap": {
+      "size": 24,
+      "shape": "rounded-square",
+      "fill": "bg.input",
+      "border": "border.subtle"
+    },
+    "avatar": {
+      "shape": "rectangle",
+      "size": [32, 32],
+      "accentBorderSide": "right",
+      "accentBorderColor": "border.focus",
+      "accentBorderWidth": "borderWidth.avatarAccent",
+      "note": "Preserve accent border when placeholder initial is replaced with cached Strava image (priority 11)"
+    },
+    "sessionStatusDot": {
+      "size": 6,
+      "shape": "circle",
+      "colors": ["color.sessionStatus.active", "color.sessionStatus.inactive"]
+    },
+    "connectionStatusDot": {
+      "size": 6,
+      "shape": "circle",
+      "colors": [
+        "color.connectionStatus.connected",
+        "color.connectionStatus.idle",
+        "color.connectionStatus.warning",
+        "color.connectionStatus.error"
+      ]
+    },
+    "commandCard": {
+      "padding": "spacing.lg",
+      "radius": "radius.card",
+      "border": "borderWidth.default",
+      "fill": "color.bg.panel"
+    },
+    "button": {
+      "minHeight": 44,
+      "paddingX": 20,
+      "radius": "radius.button",
+      "variants": ["primary", "destructive", "neutral"]
+    },
+    "statTile": {
+      "fill": "color.bg.panel",
+      "padding": "spacing.md",
+      "layout": "label-value-inline"
+    },
+    "sidebarItem": {
+      "height": 44,
+      "iconSize": 16,
+      "activeIndicatorWidth": "borderWidth.sidebarActiveIndicator"
+    },
+    "treadmillWidget": {
+      "deckFill": "color.bg.panel",
+      "outline": "color.border.focus",
+      "beltStripe": "color.text.primary @ 30% opacity",
+      "file": "app/gui/treadmill_widget.py"
+    },
+    "curveWidget": {
+      "canvasFill": "color.bg.panel",
+      "curveLine": "color.border.focus",
+      "pointHandle": "color.text.primary",
+      "file": "app/gui/curve_widget.py"
+    },
+    "profileTile": {
+      "fill": "color.bg.panel",
+      "padding": "spacing.lg",
+      "radius": "radius.card",
+      "border": "borderWidth.default",
+      "hoverFill": "color.bg.panelRaised"
+    },
+    "emptyState": {
+      "fill": "color.bg.panel",
+      "padding": "spacing.2xl",
+      "radius": "radius.card",
+      "border": "borderWidth.default",
+      "iconSize": 48,
+      "iconColor": "color.text.tertiary",
+      "titleColor": "color.text.secondary",
+      "bodyColor": "color.text.tertiary"
+    },
+    "errorCard": {
+      "fill": "color.bg.panel",
+      "borderLeftColor": "color.connectionStatus.error",
+      "borderLeftWidth": 3,
+      "padding": "spacing.lg",
+      "radius": "radius.card"
+    },
+    "warningCard": {
+      "fill": "color.bg.panel",
+      "borderLeftColor": "color.connectionStatus.warning",
+      "borderLeftWidth": 3,
+      "padding": "spacing.lg",
+      "radius": "radius.card"
+    },
+    "toast": {
+      "fill": "color.bg.panelRaised",
+      "border": "color.border.subtle",
+      "radius": "radius.toast",
+      "padding": "spacing.lg",
+      "maxWidth": 360,
+      "durationMs": 3000
+    },
+    "modal": {
+      "fill": "color.bg.panel",
+      "border": "color.border.subtle",
+      "radius": "radius.modal",
+      "overlayFill": "#000000",
+      "overlayOpacity": "60%",
+      "minWidth": 400,
+      "maxWidth": 520
+    },
+    "charts": {
+      "linePositive": "color.action.positive.fill",
+      "lineAccent": "color.border.focus",
+      "fillPositive": "color.action.positive.fill @ 15% opacity",
+      "fillAccent": "color.border.focus @ 12% opacity",
+      "gridLine": "color.border.subtle @ 50% opacity",
+      "axisLabel": "color.text.tertiary",
+      "tooltip": "color.bg.panelRaised",
+      "pointRadius": 4
+    },
+    "sessionHistoryRow": {
+      "fill": "color.bg.panel",
+      "padding": "spacing.md",
+      "radius": "radius.button",
+      "border": "borderWidth.default",
+      "hoverFill": "color.bg.panelRaised"
+    }
+  },
+  "screens": {
+    "implemented": [
+      "dashboard",
+      "calibration.noiseFloor",
+      "settings.system"
+    ],
+    "partiallyImplemented": [
+      "profiles (visual placeholders only, not actionable)"
+    ],
+    "planned": [
+      "settings.inputDevice",
+      "settings.movement",
+      "settings.sprint",
+      "settings.bodyAndSensor",
+      "settings.steamVR",
+      "settings.strava",
+      "settings.developer",
+      "calibration.multiStage",
+      "modal.deleteProfileConfirm",
+      "connectionHealthCards.live",
+      "toast.notifications",
+      "stats.history",
+      "stats.chart",
+      "profiles.emptyState",
+      "stats.emptyState"
+    ]
+  }
+}

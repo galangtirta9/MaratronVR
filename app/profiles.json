@@ -1,5 +1,5 @@
 {
-  "active_profile": "Alyx",
+  "active_profile": "Galang",
   "profiles": {
     "Alyx": {
       "axis": "REL_Y",
@@ -11,6 +11,7 @@
       "poll_interval_ms": 1,
       "auto_sprint": false,
       "sprint_threshold": 0.1,
+      "sensitivity": 1.0,
       "sprint_button": "Disabled",
       "steamvr_sprint_button": "grip",
       "curve_points": [
@@ -38,29 +39,30 @@
       "health": {
         "height_cm": 172.5,
         "stride_length_m": 0.7158749999999999,
-        "user_weight_kg": 54.5,
+        "user_weight_kg": 53.0,
         "calorie_factor": 0.75,
         "distance_calibration": 1.0,
         "mouse_dpi": 3200.0,
         "polling_rate_hz": 750.0,
         "incline_degrees": 0.0,
         "manual_friction_multiplier": 0.65,
-        "age_years": 30,
+        "age_years": 25,
         "gender": "female"
       }
     },
     "Skyrim": {
       "axis": "REL_Y",
       "omnidirectional": false,
-      "invert": true,
+      "invert": false,
       "deadzone": 0,
       "smoothing": 0.01,
       "max_raw_speed": 1.0,
       "poll_interval_ms": 1,
-      "auto_sprint": true,
+      "auto_sprint": false,
       "sprint_threshold": 0.1,
+      "sensitivity": 1.0,
       "sprint_button": "Disabled",
-      "steamvr_sprint_button": "trackpad",
+      "steamvr_sprint_button": "grip",
       "curve_points": [
         [
           0.0,
@@ -85,7 +87,7 @@
       ],
       "health": {
         "height_cm": 173.0,
-        "stride_length_m": 0.72,
+        "stride_length_m": 0.71795,
         "user_weight_kg": 55.0,
         "calorie_factor": 0.75,
         "distance_calibration": 1.0,
@@ -96,9 +98,58 @@
         "age_years": 30,
         "gender": "unspecified"
       }
+    },
+    "Galang": {
+      "axis": "REL_Y",
+      "omnidirectional": false,
+      "invert": true,
+      "deadzone": 0,
+      "smoothing": 0.01,
+      "max_raw_speed": 1.0,
+      "poll_interval_ms": 1,
+      "auto_sprint": false,
+      "sprint_threshold": 0.1,
+      "sensitivity": 1.0,
+      "sprint_button": "Disabled",
+      "steamvr_sprint_button": "grip",
+      "curve_points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.25,
+          0.12
+        ],
+        [
+          0.5,
+          0.25
+        ],
+        [
+          0.75,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "health": {
+        "height_cm": 173.0,
+        "stride_length_m": 0.71795,
+        "user_weight_kg": 55.0,
+        "calorie_factor": 1.0,
+        "distance_calibration": 1.0,
+        "mouse_dpi": 1600.0,
+        "polling_rate_hz": 1000.0,
+        "incline_degrees": 0.0,
+        "manual_friction_multiplier": 1.0,
+        "age_years": 30,
+        "gender": "unspecified"
+      }
     }
   },
-  "selected_device_path": "/dev/input/event9",
+  "selected_device_path": "/dev/input/event19",
   "output_mode": "steamvr",
   "steamvr": {
     "host": "127.0.0.1",
@@ -112,5 +163,17 @@
     "expires_at": 0,
     "activity_type": "Walk",
     "auto_detect_run_kmh": 8.0
-  }
+  },
+  "sessions": [
+    {
+      "name": "Maratron Session",
+      "activity_type": "Walk",
+      "start_date_local": "2026-07-08T00:06:11",
+      "elapsed_time": 6,
+      "distance_m": 0.015049500000000028,
+      "calories": 0.04251267339926238,
+      "average_speed_kmh": 0.009029700000000017,
+      "description": "Manual treadmill session by MaratronVR."
+    }
+  ]
 }

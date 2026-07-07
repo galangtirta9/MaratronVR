@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 from PyQt6 import QtWidgets
-from app.gui.main_window import MainWindow
+from app.bootstrap import build_app
 
 
 def main():
@@ -14,7 +14,7 @@ def main():
         with open(style_path) as f:
             app.setStyleSheet(f.read())
 
-    window = MainWindow()
+    window = build_app()
     window.show()
     sys.exit(app.exec())
 
